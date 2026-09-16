@@ -6,11 +6,14 @@ import com.mindbridge.agent.domain.ChatMessage;
 import com.mindbridge.agent.domain.ChatSession;
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.MessageRole;
+import com.mindbridge.agent.domain.ProjectStatus;
+import com.mindbridge.agent.domain.ResearchProject;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.dto.AgentRunTraceResponse;
 import com.mindbridge.agent.repository.ChatMessageRepository;
 import com.mindbridge.agent.repository.ChatSessionRepository;
+import com.mindbridge.agent.repository.ResearchProjectRepository;
 import com.mindbridge.agent.repository.UserAccountRepository;
 import com.mindbridge.agent.service.AgentRunTraceService;
 import com.mindbridge.agent.service.agent.AgentAction;
@@ -41,6 +44,9 @@ class AgentApplicationTests {
     @Autowired
     private ChatMessageRepository chatMessageRepository;
 
+    @Autowired
+    private ResearchProjectRepository researchProjectRepository;
+
     @Test
     void contextLoads() {
     }
@@ -54,10 +60,18 @@ class AgentApplicationTests {
         user.setRoles(Set.of("ROLE_USER"));
         user = userAccountRepository.save(user);
 
+        ResearchProject project = new ResearchProject();
+        project.setOwner(user);
+        project.setName("Trace project");
+        project.setObjective("Keep existing chat traces attached to a project.");
+        project.setStatus(ProjectStatus.ACTIVE);
+        project = researchProjectRepository.save(project);
+
         ChatSession session = new ChatSession();
         session.setPublicId("trace-session");
         session.setTitle("Trace session");
         session.setUser(user);
+        session.setProject(project);
         session = chatSessionRepository.save(session);
 
         ChatMessage message = new ChatMessage();

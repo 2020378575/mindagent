@@ -50,8 +50,8 @@ public class MindBridgeProperties {
     }
 
     public static class Ai {
-        /** 模型提供方：ollama 或 openai。 */
-        private String provider = "ollama";
+        /** 模型提供方：openai（默认，OpenAI 兼容 HTTP API）或 ollama。 */
+        private String provider = "openai";
         /** 生成温度，值越高回答越发散。 */
         private double temperature = 0.35;
         /** 学生端单次回复的最大生成 token 数，避免本地模型无边界扩写。 */
@@ -93,10 +93,10 @@ public class MindBridgeProperties {
     }
 
     public static class Ollama {
-        /** 本地模型服务地址。 */
+        /** 可选的本地 Ollama 服务地址。默认走 OpenAI 兼容 API，不再依赖微调模型。 */
         private String baseUrl = "http://localhost:11434";
-        /** MindBridge 项目模型名称。 */
-        private String model = "mindbridge-qwen2.5-7b-ft:latest";
+        /** 仅在 AI_PROVIDER=ollama 时使用的本地模型名。 */
+        private String model = "qwen2.5:7b";
 
         public String getBaseUrl() {
             return baseUrl;

@@ -5,11 +5,14 @@ import com.mindbridge.agent.domain.ChatMessage;
 import com.mindbridge.agent.domain.ChatSession;
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.MessageRole;
+import com.mindbridge.agent.domain.ProjectStatus;
 import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.ResearchProject;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.dto.ChatRequest;
 import com.mindbridge.agent.dto.ChatStreamEvent;
+import com.mindbridge.agent.dto.CreateResearchProjectRequest;
 import com.mindbridge.agent.repository.ChatMessageRepository;
 import com.mindbridge.agent.repository.ChatSessionRepository;
 import com.mindbridge.agent.repository.PsychologicalReportRepository;
@@ -22,6 +25,7 @@ import com.mindbridge.agent.service.agent.AgentRunResult;
 import com.mindbridge.agent.service.agent.AgentRuntimeService;
 import com.mindbridge.agent.service.memory.ShortTermMemoryService;
 import com.mindbridge.agent.service.memory.UserProfileMemoryService;
+import com.mindbridge.agent.service.project.ResearchProjectService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -45,6 +49,9 @@ import reactor.core.scheduler.Schedulers;
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+    private static final String DEFAULT_PROJECT_NAME = "Default project";
+    private static final String DEFAULT_PROJECT_OBJECTIVE =
+            "Temporary workspace for existing conversations until the research workspace is ready.";
 
     private final UserAccountRepository userAccountRepository;
     private final ChatSessionRepository chatSessionRepository;
@@ -57,6 +64,7 @@ public class ChatService {
     private final UserProfileMemoryService userProfileMemoryService;
     private final AgentRuntimeService agentRuntimeService;
     private final AgentRunTraceService agentRunTraceService;
+    private final ResearchProjectService researchProjectService;
     private final AiClient aiClient;
 
     public ChatService(
@@ -71,6 +79,7 @@ public class ChatService {
             UserProfileMemoryService userProfileMemoryService,
             AgentRuntimeService agentRuntimeService,
             AgentRunTraceService agentRunTraceService,
+            ResearchProjectService researchProjectService,
             AiClient aiClient
     ) {
         this.userAccountRepository = userAccountRepository;
@@ -84,6 +93,7 @@ public class ChatService {
         this.userProfileMemoryService = userProfileMemoryService;
         this.agentRuntimeService = agentRuntimeService;
         this.agentRunTraceService = agentRunTraceService;
+        this.researchProjectService = researchProjectService;
         this.aiClient = aiClient;
     }
 
@@ -162,8 +172,21 @@ public class ChatService {
         ChatSession session = new ChatSession();
         session.setPublicId(UUID.randomUUID().toString().replace("-", ""));
         session.setUser(user);
+        session.setProject(resolveProject(user));
         session.setTitle(input.length() > 36 ? input.substring(0, 36) : input);
         return chatSessionRepository.save(session);
+    }
+
+    private ResearchProject resolveProject(UserAccount user) {
+        return researchProjectService.list(user.getId()).stream()
+                .filter(project -> project.getStatus() == ProjectStatus.ACTIVE)
+                .findFirst()
+                .orElseGet(() -> researchProjectService.create(
+                        user.getId(),
+                        new CreateResearchProjectRequest(
+                                DEFAULT_PROJECT_NAME,
+                                DEFAULT_PROJECT_OBJECTIVE,
+                                null)));
     }
 
     private ChatMessage saveMessage(UserAccount user, ChatSession session, MessageRole role, String content) {

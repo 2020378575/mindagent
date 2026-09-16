@@ -11,7 +11,7 @@ import org.springframework.web.bind.annotation.RestController;
 /**
  * 智能体运行状态接口。
  *
- * <p>前端用它展示当前 provider、项目模型名称、RAG 参数和模型连接模式。</p>
+ * <p>前端用它展示当前 provider、调用的 API 模型名称、RAG 参数和模型连接模式。</p>
  */
 public class AgentStatusController {
 
@@ -25,7 +25,7 @@ public class AgentStatusController {
     public AgentStatusResponse status() {
         // realModelEnabled 只表示当前使用真实模型客户端，不代表业务评估一定会展示给学生。
         String provider = properties.getAi().getProvider().toLowerCase(Locale.ROOT);
-        boolean realModelEnabled = "ollama".equals(provider) || "openai".equals(provider);
+        boolean realModelEnabled = "openai".equals(provider) || "ollama".equals(provider);
         return new AgentStatusResponse(
                 provider,
                 modelName(provider),

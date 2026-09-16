@@ -16,7 +16,8 @@ import java.time.Instant;
 /**
  * 一次连续对话会话。
  *
- * <p>publicId 暴露给前端使用，数据库自增 id 只在服务端内部关联。</p>
+ * <p>publicId 暴露给前端使用，数据库自增 id 只在服务端内部关联。
+ * 每个会话必须属于一个研究项目，后续检索和决策都按项目隔离。</p>
  */
 public class ChatSession {
 
@@ -30,6 +31,10 @@ public class ChatSession {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "user_id")
     private UserAccount user;
+
+    @ManyToOne(fetch = FetchType.LAZY, optional = false)
+    @JoinColumn(name = "project_id", nullable = false)
+    private ResearchProject project;
 
     @Column(nullable = false, length = 120)
     private String title = "New conversation";
@@ -58,6 +63,14 @@ public class ChatSession {
 
     public void setUser(UserAccount user) {
         this.user = user;
+    }
+
+    public ResearchProject getProject() {
+        return project;
+    }
+
+    public void setProject(ResearchProject project) {
+        this.project = project;
     }
 
     public String getTitle() {
