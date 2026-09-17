@@ -1,12 +1,78 @@
 package com.mindbridge.agent.service.knowledge;
 
+import com.mindbridge.agent.domain.KnowledgeChunk;
+import com.mindbridge.agent.domain.SourceType;
+
 /**
- * RAG 检索结果。
- *
- * @param chunkId 数据库切块 id，外部检索结果没有 id 时可以为空
- * @param source 知识来源文件或来源名
- * @param content 命中的文本内容
- * @param score 检索相关性分数，越高越相关
+ * RAG 检索结果。项目检索必须带 projectId 和可回溯的来源位置。
  */
-public record SearchResult(Long chunkId, String source, String content, double score) {
+public record SearchResult(
+        Long chunkId,
+        Long projectId,
+        Long sourceId,
+        String sourceTitle,
+        SourceType sourceType,
+        Integer pageNumber,
+        String heading,
+        int startOffset,
+        int endOffset,
+        String content,
+        double score
+) {
+
+    public String source() {
+        return sourceTitle;
+    }
+
+    public SearchResult withScore(double newScore) {
+        return new SearchResult(
+                chunkId,
+                projectId,
+                sourceId,
+                sourceTitle,
+                sourceType,
+                pageNumber,
+                heading,
+                startOffset,
+                endOffset,
+                content,
+                newScore
+        );
+    }
+
+    public SearchResult withContent(String newContent) {
+        return new SearchResult(
+                chunkId,
+                projectId,
+                sourceId,
+                sourceTitle,
+                sourceType,
+                pageNumber,
+                heading,
+                startOffset,
+                endOffset,
+                newContent,
+                score
+        );
+    }
+
+    public static SearchResult of(Long chunkId, String source, String content, double score) {
+        return new SearchResult(chunkId, null, null, source, null, null, null, 0, 0, content, score);
+    }
+
+    public static SearchResult fromChunk(KnowledgeChunk chunk, double score) {
+        return new SearchResult(
+                chunk.getId(),
+                chunk.projectId(),
+                chunk.sourceId(),
+                chunk.getSource(),
+                chunk.getSourceType(),
+                chunk.getPageNumber(),
+                chunk.getHeading(),
+                chunk.getStartOffset(),
+                chunk.getEndOffset(),
+                chunk.getContent(),
+                score
+        );
+    }
 }

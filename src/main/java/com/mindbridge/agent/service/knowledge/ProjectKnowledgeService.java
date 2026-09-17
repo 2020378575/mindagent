@@ -4,27 +4,34 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mindbridge.agent.config.MindBridgeProperties;
 import com.mindbridge.agent.domain.KnowledgeChunk;
+import com.mindbridge.agent.domain.ResearchSource;
 import com.mindbridge.agent.repository.KnowledgeChunkRepository;
+import com.mindbridge.agent.repository.ResearchSourceRepository;
+import com.mindbridge.agent.service.document.ParsedDocument;
+import com.mindbridge.agent.service.document.ResearchSourceService;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 /**
- * RAG 知识库核心服务。
- *
- * <p>负责知识入库、向量写入、检索排序和命中上下文扩展，是咨询/风险回答的知识来源。</p>
+ * 项目级混合检索。只在当前 projectId 的切块上做向量、BM25、重排和相邻片段扩展。
  */
-public class KnowledgeService {
+public class ProjectKnowledgeService {
 
+    static final String SOURCE_NOT_FOUND_MESSAGE = "Research source not found";
+    static final String EMPTY_CHUNKS_MESSAGE = "Research source has no usable text chunks";
     private static final double VECTOR_WEIGHT = 0.65;
     private static final double BM25_WEIGHT = 0.35;
+    private static final int FAILURE_MESSAGE_LIMIT = 500;
 
     private final KnowledgeChunkRepository knowledgeChunkRepository;
+    private final ResearchSourceRepository researchSourceRepository;
+    private final ResearchSourceService researchSourceService;
     private final MindBridgeProperties properties;
     private final ChromaGateway chromaGateway;
     private final EmbeddingClient embeddingClient;
@@ -33,8 +40,10 @@ public class KnowledgeService {
     private final KnowledgeChunker chunker = new KnowledgeChunker();
     private final Bm25Scorer bm25Scorer = new Bm25Scorer();
 
-    public KnowledgeService(
+    public ProjectKnowledgeService(
             KnowledgeChunkRepository knowledgeChunkRepository,
+            ResearchSourceRepository researchSourceRepository,
+            ResearchSourceService researchSourceService,
             MindBridgeProperties properties,
             ChromaGateway chromaGateway,
             EmbeddingClient embeddingClient,
@@ -42,6 +51,8 @@ public class KnowledgeService {
             ObjectMapper objectMapper
     ) {
         this.knowledgeChunkRepository = knowledgeChunkRepository;
+        this.researchSourceRepository = researchSourceRepository;
+        this.researchSourceService = researchSourceService;
         this.properties = properties;
         this.chromaGateway = chromaGateway;
         this.embeddingClient = embeddingClient;
@@ -49,79 +60,103 @@ public class KnowledgeService {
         this.objectMapper = objectMapper;
     }
 
-    @Transactional
-    public int ingest(String source, String content) {
-        // 同一 source 重新上传时先清旧数据，保证后台知识库展示的是最新文件内容。
-        List<String> chunks = chunker.chunk(
-                content,
-                properties.getKnowledge().getChunkSize(),
-                properties.getKnowledge().getChunkOverlap());
-        knowledgeChunkRepository.deleteBySource(source);
-        chromaGateway.deleteSource(source);
-        for (int index = 0; index < chunks.size(); index++) {
-            KnowledgeChunk chunk = new KnowledgeChunk();
-            chunk.setSource(source);
-            chunk.setSourceIndex(index);
-            chunk.setContent(chunks.get(index));
-            // 有 embedding 配置时写入向量；没有配置时保持为空，检索会自动走本地兜底。
-            chunk.setEmbeddingJson(serializeEmbedding(safeEmbedding(chunks.get(index))));
-            KnowledgeChunk saved = knowledgeChunkRepository.save(chunk);
-            chromaGateway.mirror(saved);
+    public int ingest(Long projectId, Long sourceId, ParsedDocument document) {
+        ResearchSource source = researchSourceRepository.findByIdAndProject_Id(sourceId, projectId)
+                .orElseThrow(() -> new IllegalArgumentException(SOURCE_NOT_FOUND_MESSAGE));
+        try {
+            List<KnowledgeChunker.PositionedChunk> chunks = chunker.chunk(
+                    document,
+                    properties.getKnowledge().getChunkSize(),
+                    properties.getKnowledge().getChunkOverlap());
+            if (chunks.isEmpty()) {
+                researchSourceService.markFailed(sourceId, EMPTY_CHUNKS_MESSAGE);
+                throw new IllegalArgumentException(EMPTY_CHUNKS_MESSAGE);
+            }
+            knowledgeChunkRepository.deleteByResearchSource_Id(sourceId);
+            chromaGateway.deleteSource(projectId, sourceId);
+            int saved = 0;
+            for (KnowledgeChunker.PositionedChunk positioned : chunks) {
+                KnowledgeChunk chunk = new KnowledgeChunk();
+                chunk.setProject(source.getProject());
+                chunk.setResearchSource(source);
+                chunk.setSource(document.title());
+                chunk.setSourceType(document.sourceType());
+                chunk.setPageNumber(positioned.pageNumber());
+                chunk.setHeading(positioned.heading());
+                chunk.setStartOffset(positioned.startOffset());
+                chunk.setEndOffset(positioned.endOffset());
+                chunk.setSourceIndex(positioned.sourceIndex());
+                chunk.setContent(positioned.content());
+                chunk.setEmbeddingJson(serializeEmbedding(safeEmbedding(positioned.content())));
+                KnowledgeChunk persisted = knowledgeChunkRepository.save(chunk);
+                chromaGateway.mirror(persisted);
+                saved++;
+            }
+            researchSourceService.markReady(sourceId, document.sections().size(), saved);
+            return saved;
+        } catch (IllegalArgumentException exception) {
+            throw exception;
+        } catch (RuntimeException exception) {
+            researchSourceService.markFailed(sourceId, safeFailureMessage(exception));
+            throw exception;
         }
-        return chunks.size();
     }
 
-    @Transactional(readOnly = true)
-    public List<SearchResult> retrieve(String query, int topK) {
-        if (topK <= 0 || query == null || query.isBlank()) {
+    public List<SearchResult> retrieve(Long projectId, String query, int topK) {
+        if (projectId == null || topK <= 0 || query == null || query.isBlank()) {
             return List.of();
         }
-        int candidateLimit = Math.max(Math.max(topK * 4, 20), properties.getKnowledge().getRerankerCandidateLimit());
-        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findAll();
-        List<SearchResult> vectorResults = retrieveByVector(query, candidateLimit, chunks);
-        List<SearchResult> bm25Results = bm25Scorer.rank(query, chunks, candidateLimit);
-        List<SearchResult> hybridCandidates = mergeHybridResults(vectorResults, bm25Results, candidateLimit);
-        List<SearchResult> reranked = knowledgeReranker.rerank(query, hybridCandidates, topK);
-        return expandBestContext(reranked, topK);
+        List<KnowledgeChunk> projectChunks = knowledgeChunkRepository.findByProject_Id(projectId);
+        List<SearchResult> vector = vectorCandidates(projectId, query, candidateLimit(topK), projectChunks);
+        List<SearchResult> keyword = bm25Scorer.rank(query, projectChunks, candidateLimit(topK)).stream()
+                .filter(result -> projectId.equals(result.projectId()))
+                .toList();
+        return expandBestContext(
+                projectId,
+                knowledgeReranker.rerank(query, merge(projectId, vector, keyword), topK),
+                topK
+        );
     }
 
-    private List<SearchResult> retrieveByVector(String query, int limit, List<KnowledgeChunk> chunks) {
-        List<SearchResult> chromaResults = chromaGateway.query(query, limit);
+    private List<SearchResult> vectorCandidates(
+            Long projectId,
+            String query,
+            int limit,
+            List<KnowledgeChunk> projectChunks
+    ) {
+        List<SearchResult> chromaResults = chromaGateway.query(projectId, query, limit).stream()
+                .filter(result -> projectId.equals(result.projectId()))
+                .toList();
         if (!chromaResults.isEmpty()) {
             return chromaResults;
         }
-        return retrieveByEmbedding(query, limit, chunks);
-    }
-
-    private List<SearchResult> retrieveByEmbedding(String query, int topK, List<KnowledgeChunk> chunks) {
         List<Double> queryEmbedding = safeEmbedding(query);
         if (queryEmbedding.isEmpty()) {
             return List.of();
         }
-        return chunks.stream()
+        return projectChunks.stream()
                 .map(chunk -> SearchResult.fromChunk(
                         chunk,
                         cosine(queryEmbedding, parseEmbedding(chunk.getEmbeddingJson()))))
                 .filter(result -> result.score() > 0.0)
+                .filter(result -> projectId.equals(result.projectId()))
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
-                .limit(topK)
+                .limit(limit)
                 .toList();
     }
 
-    private List<SearchResult> mergeHybridResults(
-            List<SearchResult> vectorResults,
-            List<SearchResult> bm25Results,
-            int topK
-    ) {
+    private List<SearchResult> merge(Long projectId, List<SearchResult> vectorResults, List<SearchResult> bm25Results) {
         Map<String, HybridCandidate> candidates = new LinkedHashMap<>();
         double maxVectorScore = maxScore(vectorResults);
         double maxBm25Score = maxScore(bm25Results);
         mergeRoute(candidates, vectorResults, maxVectorScore, true);
         mergeRoute(candidates, bm25Results, maxBm25Score, false);
+        int limit = Math.max(1, Math.max(vectorResults.size(), bm25Results.size()));
         return candidates.values().stream()
                 .map(HybridCandidate::toSearchResult)
+                .filter(result -> projectId.equals(result.projectId()))
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
-                .limit(topK)
+                .limit(limit)
                 .toList();
     }
 
@@ -163,34 +198,43 @@ public class KnowledgeService {
         return "content:" + result.source() + ":" + result.content();
     }
 
-    private List<SearchResult> expandBestContext(List<SearchResult> ranked, int topK) {
-        if (ranked.isEmpty()) {
-            return ranked;
+    private List<SearchResult> expandBestContext(Long projectId, List<SearchResult> ranked, int topK) {
+        List<SearchResult> owned = ranked.stream()
+                .filter(result -> projectId.equals(result.projectId()))
+                .toList();
+        if (owned.isEmpty()) {
+            return List.of();
         }
-        // 命中片段前后各补一段，减少切块边界导致的上下文断裂。
-        SearchResult best = ranked.get(0);
-        SearchResult expanded = expand(best);
+        SearchResult best = owned.get(0);
+        SearchResult expanded = expand(projectId, best);
         List<SearchResult> results = new ArrayList<>();
         results.add(expanded);
-        ranked.stream()
+        owned.stream()
                 .skip(1)
-                .filter(result -> !sameChunk(result, expanded))
+                .filter(result -> !Objects.equals(result.chunkId(), expanded.chunkId()))
                 .limit(Math.max(0, topK - 1))
                 .forEach(results::add);
         return results;
     }
 
-    private SearchResult expand(SearchResult result) {
-        if (result.chunkId() == null) {
+    private SearchResult expand(Long projectId, SearchResult result) {
+        if (result.chunkId() == null || result.sourceId() == null) {
             return result;
         }
         return knowledgeChunkRepository.findById(result.chunkId())
+                .filter(chunk -> projectId.equals(chunk.projectId()))
                 .map(chunk -> {
                     List<KnowledgeChunk> neighbors = knowledgeChunkRepository
-                            .findBySourceAndSourceIndexBetweenOrderBySourceIndexAsc(
-                                    chunk.getSource(),
+                            .findByResearchSource_IdAndSourceIndexBetweenOrderBySourceIndexAsc(
+                                    chunk.sourceId(),
                                     Math.max(0, chunk.getSourceIndex() - 1),
-                                    chunk.getSourceIndex() + 1);
+                                    chunk.getSourceIndex() + 1)
+                            .stream()
+                            .filter(neighbor -> projectId.equals(neighbor.projectId()))
+                            .toList();
+                    if (neighbors.isEmpty()) {
+                        return SearchResult.fromChunk(chunk, result.score());
+                    }
                     String expandedContent = String.join("\n\n", neighbors.stream()
                             .map(KnowledgeChunk::getContent)
                             .toList());
@@ -199,15 +243,14 @@ public class KnowledgeService {
                 .orElse(result);
     }
 
-    private boolean sameChunk(SearchResult result, SearchResult expanded) {
-        return result.chunkId() != null && result.chunkId().equals(expanded.chunkId());
+    private int candidateLimit(int topK) {
+        return Math.max(Math.max(topK * 4, 20), properties.getKnowledge().getRerankerCandidateLimit());
     }
 
     private List<Double> safeEmbedding(String text) {
         try {
             return embeddingClient.embed(text);
         } catch (Exception ignored) {
-            // embedding 失败不影响知识库可用性，后续会回退到本地检索。
             return List.of();
         }
     }
@@ -255,6 +298,17 @@ public class KnowledgeService {
         return dot / (Math.sqrt(leftNorm) * Math.sqrt(rightNorm));
     }
 
+    private String safeFailureMessage(Throwable exception) {
+        String message = exception.getMessage();
+        if (message == null || message.isBlank()) {
+            message = exception.getClass().getSimpleName();
+        }
+        if (message.length() > FAILURE_MESSAGE_LIMIT) {
+            return message.substring(0, FAILURE_MESSAGE_LIMIT);
+        }
+        return message;
+    }
+
     private static class HybridCandidate {
         private final SearchResult result;
         private double vectorScore;
@@ -265,8 +319,7 @@ public class KnowledgeService {
         }
 
         private SearchResult toSearchResult() {
-            double score = vectorScore * VECTOR_WEIGHT + bm25Score * BM25_WEIGHT;
-            return result.withScore(score);
+            return result.withScore(vectorScore * VECTOR_WEIGHT + bm25Score * BM25_WEIGHT);
         }
     }
 }

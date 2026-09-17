@@ -9,6 +9,8 @@ import org.springframework.data.jpa.repository.JpaRepository;
  */
 public interface ResearchSourceRepository extends JpaRepository<ResearchSource, Long> {
 
+    Optional<ResearchSource> findByIdAndProject_Id(Long sourceId, Long projectId);
+
     Optional<ResearchSource> findByIdAndProject_IdAndOwner_Id(Long sourceId, Long projectId, Long ownerId);
 
     Optional<ResearchSource> findByFilenameAndProject_Id(String filename, Long projectId);

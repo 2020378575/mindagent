@@ -9,9 +9,21 @@ import org.springframework.data.jpa.repository.JpaRepository;
  */
 public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, Long> {
 
+    List<KnowledgeChunk> findByProject_Id(Long projectId);
+
+    List<KnowledgeChunk> findByResearchSource_IdOrderBySourceIndexAsc(Long sourceId);
+
+    List<KnowledgeChunk> findByResearchSource_IdAndSourceIndexBetweenOrderBySourceIndexAsc(
+            Long sourceId,
+            int startIndex,
+            int endIndex
+    );
+
+    void deleteByResearchSource_Id(Long sourceId);
+
     List<KnowledgeChunk> findTop20BySourceOrderByCreatedAtDesc(String source);
 
-    /** 检索命中后取相邻切块，用于补齐上下文。 */
+    /** 检索命中后取相邻切块，用于补齐全局知识库上下文。 */
     List<KnowledgeChunk> findBySourceAndSourceIndexBetweenOrderBySourceIndexAsc(
             String source,
             int startIndex,

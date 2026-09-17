@@ -26,9 +26,9 @@ class KnowledgeRerankerTests {
                 new ObjectMapper());
 
         List<SearchResult> results = reranker.rerank("最近焦虑到睡不着，想知道怎么缓解", List.of(
-                new SearchResult(1L, "a.md", "校园心理中心预约流程", 0.90),
-                new SearchResult(2L, "b.md", "焦虑、入睡困难和睡前放松练习", 0.80),
-                new SearchResult(3L, "c.md", "考试压力下的计划拆分", 0.20)
+                SearchResult.of(1L, "a.md", "校园心理中心预约流程", 0.90),
+                SearchResult.of(2L, "b.md", "焦虑、入睡困难和睡前放松练习", 0.80),
+                SearchResult.of(3L, "c.md", "考试压力下的计划拆分", 0.20)
         ), 2);
 
         assertThat(results)
@@ -44,9 +44,9 @@ class KnowledgeRerankerTests {
                 new ObjectMapper());
 
         List<SearchResult> results = reranker.rerank("焦虑睡眠", List.of(
-                new SearchResult(1L, "a.md", "初排第一", 0.90),
-                new SearchResult(2L, "b.md", "初排第二", 0.80),
-                new SearchResult(3L, "c.md", "初排第三", 0.70)
+                SearchResult.of(1L, "a.md", "初排第一", 0.90),
+                SearchResult.of(2L, "b.md", "初排第二", 0.80),
+                SearchResult.of(3L, "c.md", "初排第三", 0.70)
         ), 2);
 
         assertThat(results)

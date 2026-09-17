@@ -28,11 +28,7 @@ public class Bm25Scorer {
         }
         CorpusStats stats = buildCorpusStats(chunks);
         return chunks.stream()
-                .map(chunk -> new SearchResult(
-                        chunk.getId(),
-                        chunk.getSource(),
-                        chunk.getContent(),
-                        score(queryTerms, stats, chunk)))
+                .map(chunk -> SearchResult.fromChunk(chunk, score(queryTerms, stats, chunk)))
                 .filter(result -> result.score() > 0.0)
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
                 .limit(limit)

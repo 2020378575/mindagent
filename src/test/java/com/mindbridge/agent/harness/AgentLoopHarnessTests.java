@@ -57,12 +57,12 @@ class AgentLoopHarnessTests {
         when(userProfileMemoryService.profileBrief(any(UserAccount.class), anyString()))
                 .thenReturn("无已保存用户画像。");
         when(knowledgeService.retrieve(anyString(), anyInt())).thenReturn(List.of(
-                new SearchResult(
+                SearchResult.of(
                         1L,
                         "risk-policy.md",
                         "HIGH immediate danger should prioritize safety, trusted people and school counseling center.",
                         0.95),
-                new SearchResult(
+                SearchResult.of(
                         2L,
                         "campus-mental-health.md",
                         "焦虑和失眠可以使用呼吸、五感着陆、睡眠作息和学校心理中心资源。",

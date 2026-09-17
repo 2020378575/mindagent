@@ -100,7 +100,7 @@ public class KnowledgeReranker {
                     ? Math.max(0.0, candidate.score()) / maxInitialScore
                     : 0.0;
             double score = clamp(entry.getValue()) * RERANK_WEIGHT + normalizedInitial * INITIAL_WEIGHT;
-            rescored.add(new SearchResult(candidate.chunkId(), candidate.source(), candidate.content(), score));
+            rescored.add(candidate.withScore(score));
             rescoredIndexes.add(index);
         }
 

@@ -29,13 +29,13 @@ class RagEvaluationHarnessTests {
         when(knowledgeService.retrieve(anyString(), anyInt())).thenAnswer(invocation -> {
             String question = invocation.getArgument(0, String.class);
             if (question.contains("不想活") || question.contains("伤害自己")) {
-                return List.of(new SearchResult(
+                return List.of(SearchResult.of(
                         1L,
                         "risk-policy.md",
                         "HIGH immediate danger: 请把安全放在第一位，联系可信任的人、辅导员、学校心理中心或紧急救助。",
                         0.98));
             }
-            return List.of(new SearchResult(
+            return List.of(SearchResult.of(
                     2L,
                     "campus-mental-health.md",
                     "焦虑心慌可使用 grounding 五感着陆、breathing 呼吸、sleep 睡眠和 routine 作息支持。",
