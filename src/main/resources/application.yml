@@ -137,3 +137,5 @@ mindbridge:
       recipients: ${ALERT_MAIL_RECIPIENTS:counselor-alerts@example.com}
       max-retries: ${ALERT_MAIL_MAX_RETRIES:2}
       mcp-server-delivery-mode: ${MCP_EMAIL_SERVER_DELIVERY_MODE:log}
+  research:
+    source-storage-dir: ${EVIDENCELAB_SOURCE_DIR:./data/research-sources}

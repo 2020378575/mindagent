@@ -20,6 +20,7 @@ public class MindBridgeProperties {
     private final Knowledge knowledge = new Knowledge();
     private final RagEval ragEval = new RagEval();
     private final Mcp mcp = new Mcp();
+    private final Research research = new Research();
 
     public Ai getAi() {
         return ai;
@@ -47,6 +48,10 @@ public class MindBridgeProperties {
 
     public Mcp getMcp() {
         return mcp;
+    }
+
+    public Research getResearch() {
+        return research;
     }
 
     public static class Ai {
@@ -487,6 +492,19 @@ public class MindBridgeProperties {
 
         public void setMcpServerDeliveryMode(String mcpServerDeliveryMode) {
             this.mcpServerDeliveryMode = mcpServerDeliveryMode;
+        }
+    }
+
+    public static class Research {
+        /** 研究资料原始文件目录。使用不透明 storageKey，重启后仍可恢复解析。 */
+        private String sourceStorageDir = "./data/research-sources";
+
+        public String getSourceStorageDir() {
+            return sourceStorageDir;
+        }
+
+        public void setSourceStorageDir(String sourceStorageDir) {
+            this.sourceStorageDir = sourceStorageDir;
         }
     }
 }
