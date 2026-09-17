@@ -41,10 +41,11 @@ public class UserMemoryItem {
     private UserMemoryType type = UserMemoryType.PREFERENCE;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String summary;
 
     @Lob
+    @Column(columnDefinition = "LONGTEXT")
     private String evidence;
 
     @Column(nullable = false)

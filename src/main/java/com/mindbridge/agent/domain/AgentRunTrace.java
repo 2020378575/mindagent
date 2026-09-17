@@ -57,7 +57,7 @@ public class AgentRunTrace {
     private ChatMessage triggerMessage;
 
     @Lob
-    @Column(nullable = false)
+    @Column(nullable = false, columnDefinition = "LONGTEXT")
     private String input;
 
     @Enumerated(EnumType.STRING)
@@ -69,12 +69,14 @@ public class AgentRunTrace {
     private RiskLevel riskLevel = RiskLevel.LOW;
 
     @Lob
+    @Column(columnDefinition = "LONGTEXT")
     private String memoryBrief;
 
     @Column(length = 500)
     private String knowledgeQuery;
 
     @Lob
+    @Column(columnDefinition = "LONGTEXT")
     private String responsePlan;
 
     @Enumerated(EnumType.STRING)
