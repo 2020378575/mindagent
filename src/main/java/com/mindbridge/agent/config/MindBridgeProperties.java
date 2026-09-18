@@ -21,6 +21,7 @@ public class MindBridgeProperties {
     private final RagEval ragEval = new RagEval();
     private final Mcp mcp = new Mcp();
     private final Research research = new Research();
+    private final Task task = new Task();
 
     public Ai getAi() {
         return ai;
@@ -52,6 +53,10 @@ public class MindBridgeProperties {
 
     public Research getResearch() {
         return research;
+    }
+
+    public Task getTask() {
+        return task;
     }
 
     public static class Ai {
@@ -505,6 +510,49 @@ public class MindBridgeProperties {
 
         public void setSourceStorageDir(String sourceStorageDir) {
             this.sourceStorageDir = sourceStorageDir;
+        }
+    }
+
+    public static class Task {
+        /** 异步任务工作线程数。 */
+        private int workerCount = 2;
+        /** 单阶段超时，供后续阶段看门狗使用。 */
+        private java.time.Duration stageTimeout = java.time.Duration.ofSeconds(60);
+        /** RUNNING 超过该时间视为僵死，启动时重置为 PENDING。 */
+        private java.time.Duration staleRunningAfter = java.time.Duration.ofMinutes(5);
+        /** 含首次执行在内的最大尝试次数；瞬时失败可自动重试。 */
+        private int maxAttempts = 2;
+
+        public int getWorkerCount() {
+            return workerCount;
+        }
+
+        public void setWorkerCount(int workerCount) {
+            this.workerCount = workerCount;
+        }
+
+        public java.time.Duration getStageTimeout() {
+            return stageTimeout;
+        }
+
+        public void setStageTimeout(java.time.Duration stageTimeout) {
+            this.stageTimeout = stageTimeout;
+        }
+
+        public java.time.Duration getStaleRunningAfter() {
+            return staleRunningAfter;
+        }
+
+        public void setStaleRunningAfter(java.time.Duration staleRunningAfter) {
+            this.staleRunningAfter = staleRunningAfter;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int maxAttempts) {
+            this.maxAttempts = maxAttempts;
         }
     }
 }

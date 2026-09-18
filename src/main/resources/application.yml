@@ -139,3 +139,8 @@ mindbridge:
       mcp-server-delivery-mode: ${MCP_EMAIL_SERVER_DELIVERY_MODE:log}
   research:
     source-storage-dir: ${EVIDENCELAB_SOURCE_DIR:./data/research-sources}
+  task:
+    worker-count: ${TASK_WORKER_COUNT:2}
+    stage-timeout: ${TASK_STAGE_TIMEOUT:60s}
+    stale-running-after: ${TASK_STALE_RUNNING_AFTER:5m}
+    max-attempts: ${TASK_MAX_ATTEMPTS:2}

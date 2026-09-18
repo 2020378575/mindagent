@@ -1,6 +1,7 @@
 package com.mindbridge.agent.repository;
 
 import com.mindbridge.agent.domain.ResearchSource;
+import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.JpaRepository;
 
@@ -14,4 +15,6 @@ public interface ResearchSourceRepository extends JpaRepository<ResearchSource, 
     Optional<ResearchSource> findByIdAndProject_IdAndOwner_Id(Long sourceId, Long projectId, Long ownerId);
 
     Optional<ResearchSource> findByFilenameAndProject_Id(String filename, Long projectId);
+
+    List<ResearchSource> findByProject_IdAndOwner_IdOrderByCreatedAtDesc(Long projectId, Long ownerId);
 }

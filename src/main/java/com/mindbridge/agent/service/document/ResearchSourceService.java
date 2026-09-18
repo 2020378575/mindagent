@@ -6,6 +6,7 @@ import com.mindbridge.agent.domain.SourceStatus;
 import com.mindbridge.agent.domain.SourceType;
 import com.mindbridge.agent.repository.ResearchSourceRepository;
 import com.mindbridge.agent.service.project.ResearchProjectService;
+import java.util.List;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -130,6 +131,12 @@ public class ResearchSourceService {
         researchProjectService.requireOwnedProject(userId, projectId);
         return researchSourceRepository.findByIdAndProject_IdAndOwner_Id(sourceId, projectId, userId)
                 .orElseThrow(() -> new IllegalArgumentException(SOURCE_NOT_FOUND_MESSAGE));
+    }
+
+    @Transactional(readOnly = true)
+    public List<ResearchSource> list(Long userId, Long projectId) {
+        researchProjectService.requireOwnedProject(userId, projectId);
+        return researchSourceRepository.findByProject_IdAndOwner_IdOrderByCreatedAtDesc(projectId, userId);
     }
 
     private ResearchSource requiredSource(Long sourceId) {
