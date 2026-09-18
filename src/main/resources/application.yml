@@ -3,15 +3,15 @@ server:
 
 spring:
   application:
-    name: mindbridge-agent
+    name: evidencelab-agent
   ai:
     mcp:
       server:
         enabled: ${MCP_SERVER_ENABLED:true}
-        name: mindbridge-mcp-server
+        name: evidencelab-mcp-server
         version: 0.1.0
         type: SYNC
-        instructions: "MindBridge MCP server exposes psychological report archival and high-risk alert tools."
+        instructions: "EvidenceLab MCP server exposes ops archive and high-priority alert tools."
         sse-endpoint: ${MCP_SERVER_SSE_ENDPOINT:/sse}
         sse-message-endpoint: ${MCP_SERVER_MESSAGE_ENDPOINT:/mcp/messages}
         capabilities:
@@ -22,13 +22,13 @@ spring:
       client:
         enabled: ${MCP_CLIENT_ENABLED:false}
         initialized: ${MCP_CLIENT_INITIALIZED:true}
-        name: mindbridge-mcp-client
+        name: evidencelab-mcp-client
         version: 0.1.0
         type: SYNC
         request-timeout: ${MCP_CLIENT_REQUEST_TIMEOUT:20s}
         sse:
           connections:
-            mindbridge-tools:
+            evidencelab-tools:
               url: ${MCP_SERVER_URL:http://localhost:${SERVER_PORT:8080}}
               sse-endpoint: ${MCP_SERVER_SSE_ENDPOINT:/sse}
   datasource:
@@ -121,7 +121,7 @@ mindbridge:
     chunk-overlap: ${KNOWLEDGE_CHUNK_OVERLAP:64}
   rag-eval:
     enabled: ${RAG_EVAL_ENABLED:false}
-    dataset: ${RAG_EVAL_DATASET:classpath:rag-eval/mindbridge-rag-eval.json}
+    dataset: ${RAG_EVAL_DATASET:classpath:rag-eval/evidencelab-rag-eval-v1.json}
     top-k: ${RAG_EVAL_TOP_K:4}
     exit-after-run: ${RAG_EVAL_EXIT_AFTER_RUN:false}
     output-path: ${RAG_EVAL_OUTPUT_PATH:target/rag-eval-report.json}
@@ -134,7 +134,7 @@ mindbridge:
       mode: ${MCP_EMAIL_MODE:log}
       url: ${MCP_EMAIL_URL:http://localhost:8082}
       from: ${ALERT_MAIL_FROM:mindbridge-alerts@example.com}
-      recipients: ${ALERT_MAIL_RECIPIENTS:counselor-alerts@example.com}
+      recipients: ${ALERT_MAIL_RECIPIENTS:research-alerts@example.com}
       max-retries: ${ALERT_MAIL_MAX_RETRIES:2}
       mcp-server-delivery-mode: ${MCP_EMAIL_SERVER_DELIVERY_MODE:log}
   research:

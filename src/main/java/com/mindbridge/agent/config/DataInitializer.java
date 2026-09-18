@@ -43,14 +43,14 @@ public class DataInitializer implements ApplicationRunner {
         // 管理员账号用于后台查看，学生账号用于正常聊天体验。
         UserAccount admin = new UserAccount();
         admin.setUsername("admin");
-        admin.setDisplayName("Counselor Admin");
+        admin.setDisplayName("Research Admin");
         admin.setPassword(passwordEncoder.encode("admin123"));
         admin.setRoles(Set.of("ROLE_ADMIN", "ROLE_USER"));
         userAccountRepository.save(admin);
 
         UserAccount student = new UserAccount();
         student.setUsername("student");
-        student.setDisplayName("Demo Student");
+        student.setDisplayName("Demo Researcher");
         student.setPassword(passwordEncoder.encode("student123"));
         student.setRoles(Set.of("ROLE_USER"));
         userAccountRepository.save(student);

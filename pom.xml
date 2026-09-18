@@ -5,10 +5,10 @@
     <modelVersion>4.0.0</modelVersion>
 
     <groupId>com.mindbridge</groupId>
-    <artifactId>mindbridge-agent</artifactId>
+    <artifactId>evidencelab-agent</artifactId>
     <version>0.1.0</version>
-    <name>MindBridge Agent</name>
-    <description>Campus mental-health assistant with routed RAG, SSE, risk alerting and MCP tools.</description>
+    <name>EvidenceLab</name>
+    <description>Research evidence workspace with project RAG, recoverable tasks, multi-agent orchestration and MCP tools.</description>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
