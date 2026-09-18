@@ -2,7 +2,7 @@ package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.config.MindBridgeProperties;
 import com.mindbridge.agent.domain.AlertRecord;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import java.util.Map;
 import org.springframework.web.reactive.function.client.WebClient;
 
@@ -18,7 +18,7 @@ public class HttpAlertNotifier implements AlertNotifier {
     }
 
     @Override
-    public void notify(AlertRecord alertRecord, PsychologicalReport report) {
+    public void notify(AlertRecord alertRecord, OpsArchiveRecord report) {
         webClient.post()
                 .uri("/send")
                 .bodyValue(Map.of(

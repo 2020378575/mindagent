@@ -2,11 +2,11 @@ package com.mindbridge.agent.service;
 
 import com.mindbridge.agent.config.MindBridgeProperties;
 import com.mindbridge.agent.domain.AlertRecord;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.ToolStatus;
 import com.mindbridge.agent.repository.AlertRecordRepository;
-import com.mindbridge.agent.repository.PsychologicalReportRepository;
+import com.mindbridge.agent.repository.OpsArchiveRecordRepository;
 import com.mindbridge.agent.service.mcp.AlertNotifier;
 import com.mindbridge.agent.service.mcp.ExcelReportWriter;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -19,13 +19,13 @@ import org.springframework.transaction.support.TransactionTemplate;
 /**
  * 后台工具编排服务。
  *
- * <p>心理报告生成后，按“写 Excel -> 高风险发预警”的顺序执行工具链并持久化状态。</p>
+ * <p>归档记录生成后，按“写 Excel -> 高优先级发预警”的顺序执行工具链并持久化状态。</p>
  */
 public class ToolOrchestrationService {
 
     private final ExcelReportWriter excelReportWriter;
     private final AlertNotifier alertNotifier;
-    private final PsychologicalReportRepository reportRepository;
+    private final OpsArchiveRecordRepository reportRepository;
     private final AlertRecordRepository alertRecordRepository;
     private final MindBridgeProperties properties;
     private final TaskExecutor mcpTaskExecutor;
@@ -34,7 +34,7 @@ public class ToolOrchestrationService {
     public ToolOrchestrationService(
             ExcelReportWriter excelReportWriter,
             AlertNotifier alertNotifier,
-            PsychologicalReportRepository reportRepository,
+            OpsArchiveRecordRepository reportRepository,
             AlertRecordRepository alertRecordRepository,
             MindBridgeProperties properties,
             @Qualifier("mcpTaskExecutor")
@@ -66,17 +66,17 @@ public class ToolOrchestrationService {
     }
 
     private void handleInTransaction(Long reportId) {
-        PsychologicalReport managedReport = reportRepository.findById(reportId)
+        OpsArchiveRecord managedReport = reportRepository.findById(reportId)
                 .orElseThrow(() -> new IllegalArgumentException("Report not found: " + reportId));
         writeExcel(managedReport);
-        // 只有 Excel 写入成功且风险等级为 HIGH，才进入预警通知，和文档中的工具链顺序保持一致。
+        // 只有 Excel 写入成功且优先级为 HIGH，才进入预警通知，和文档中的工具链顺序保持一致。
         if (managedReport.getRiskLevel() == RiskLevel.HIGH && managedReport.getExcelStatus() == ToolStatus.SUCCESS) {
             sendAlerts(managedReport);
         }
         reportRepository.save(managedReport);
     }
 
-    private void writeExcel(PsychologicalReport report) {
+    private void writeExcel(OpsArchiveRecord report) {
         try {
             excelReportWriter.write(report);
             report.setExcelStatus(ToolStatus.SUCCESS);
@@ -86,7 +86,7 @@ public class ToolOrchestrationService {
         }
     }
 
-    private void sendAlerts(PsychologicalReport report) {
+    private void sendAlerts(OpsArchiveRecord report) {
         boolean allSuccess = true;
         for (String recipient : properties.getMcp().getEmail().getRecipients()) {
             AlertRecord alertRecord = new AlertRecord();

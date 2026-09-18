@@ -1,7 +1,7 @@
 package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.domain.AlertRecord;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
@@ -14,7 +14,7 @@ public class McpAlertNotifier implements AlertNotifier {
     }
 
     @Override
-    public void notify(AlertRecord alertRecord, PsychologicalReport report) {
+    public void notify(AlertRecord alertRecord, OpsArchiveRecord report) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("recipient", alertRecord.getRecipient());
         payload.put("reportId", report.getId());

@@ -1,7 +1,7 @@
 package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.domain.AlertRecord;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 
 /**
  * 高风险预警通知接口。
@@ -10,5 +10,5 @@ import com.mindbridge.agent.domain.PsychologicalReport;
  */
 public interface AlertNotifier {
 
-    void notify(AlertRecord alertRecord, PsychologicalReport report);
+    void notify(AlertRecord alertRecord, OpsArchiveRecord report);
 }

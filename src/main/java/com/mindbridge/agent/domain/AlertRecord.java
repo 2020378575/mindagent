@@ -18,7 +18,7 @@ import java.time.Instant;
 /**
  * 高风险预警发送记录。
  *
- * <p>一条心理报告可能对应多个收件人，每个收件人都有独立的发送状态、重试次数和错误信息。</p>
+ * <p>一条归档记录可能对应多个收件人，每个收件人都有独立的发送状态、重试次数和错误信息。</p>
  */
 public class AlertRecord {
 
@@ -28,7 +28,7 @@ public class AlertRecord {
 
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "report_id")
-    private PsychologicalReport report;
+    private OpsArchiveRecord report;
 
     @Column(nullable = false, length = 240)
     private String recipient;
@@ -53,11 +53,11 @@ public class AlertRecord {
         return id;
     }
 
-    public PsychologicalReport getReport() {
+    public OpsArchiveRecord getReport() {
         return report;
     }
 
-    public void setReport(PsychologicalReport report) {
+    public void setReport(OpsArchiveRecord report) {
         this.report = report;
     }
 

@@ -2,7 +2,7 @@ package com.mindbridge.agent.dto;
 
 import com.mindbridge.agent.domain.EmotionLabel;
 import com.mindbridge.agent.domain.IntentType;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.ToolStatus;
 import java.time.Instant;
@@ -25,7 +25,7 @@ public record ExcelRecordResponse(
         ToolStatus excelStatus,
         Instant createdAt
 ) {
-    public static ExcelRecordResponse from(PsychologicalReport report) {
+    public static ExcelRecordResponse from(OpsArchiveRecord report) {
         return new ExcelRecordResponse(
                 report.getId(),
                 report.getUser().getId(),

@@ -39,7 +39,7 @@ public record AgentRunResult(
         );
     }
 
-    /** 兼容旧聊天落库字段：研究环不再做心理风险评估。 */
+    /** 兼容旧聊天落库字段：研究环不再做优先级评估。 */
     public RiskLevel riskLevel() {
         return RiskLevel.LOW;
     }

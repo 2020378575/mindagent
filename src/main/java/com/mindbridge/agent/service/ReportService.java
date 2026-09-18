@@ -2,7 +2,7 @@ package com.mindbridge.agent.service;
 
 import com.mindbridge.agent.domain.ChatMessage;
 import com.mindbridge.agent.domain.ChatSession;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import com.mindbridge.agent.domain.ToolStatus;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.dto.AlertRecordResponse;
@@ -12,7 +12,7 @@ import com.mindbridge.agent.dto.ExcelRecordResponse;
 import com.mindbridge.agent.repository.AlertRecordRepository;
 import com.mindbridge.agent.repository.ChatMessageRepository;
 import com.mindbridge.agent.repository.ChatSessionRepository;
-import com.mindbridge.agent.repository.PsychologicalReportRepository;
+import com.mindbridge.agent.repository.OpsArchiveRecordRepository;
 import java.util.List;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -29,20 +29,20 @@ public class ReportService {
 
     private static final String ROLE_ADMIN = "ROLE_ADMIN";
 
-    private final PsychologicalReportRepository psychologicalReportRepository;
+    private final OpsArchiveRecordRepository opsArchiveRecordRepository;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
     private final AlertRecordRepository alertRecordRepository;
     private final AgentRunTraceService agentRunTraceService;
 
     public ReportService(
-            PsychologicalReportRepository psychologicalReportRepository,
+            OpsArchiveRecordRepository opsArchiveRecordRepository,
             ChatSessionRepository chatSessionRepository,
             ChatMessageRepository chatMessageRepository,
             AlertRecordRepository alertRecordRepository,
             AgentRunTraceService agentRunTraceService
     ) {
-        this.psychologicalReportRepository = psychologicalReportRepository;
+        this.opsArchiveRecordRepository = opsArchiveRecordRepository;
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
         this.alertRecordRepository = alertRecordRepository;
@@ -50,21 +50,21 @@ public class ReportService {
     }
 
     @Transactional(readOnly = true)
-    public List<PsychologicalReport> myReports(Long userId) {
-        return psychologicalReportRepository.findTop50ByUser_IdOrderByCreatedAtDesc(userId);
+    public List<OpsArchiveRecord> myReports(Long userId) {
+        return opsArchiveRecordRepository.findTop50ByUser_IdOrderByCreatedAtDesc(userId);
     }
 
     @Transactional(readOnly = true)
-    public List<PsychologicalReport> latestReports() {
+    public List<OpsArchiveRecord> latestReports() {
         // 管理员后台只展示学生对话产生的报告，避免管理员测试消息混入统计大屏。
-        return psychologicalReportRepository.findTop100ByOrderByCreatedAtDesc().stream()
+        return opsArchiveRecordRepository.findTop100ByOrderByCreatedAtDesc().stream()
                 .filter(ReportService::isStudentReport)
                 .toList();
     }
 
     @Transactional(readOnly = true)
     public List<ExcelRecordResponse> excelRecords() {
-        return psychologicalReportRepository
+        return opsArchiveRecordRepository
                 .findTop100ByExcelStatusOrderByCreatedAtDesc(ToolStatus.SUCCESS)
                 .stream()
                 .filter(ReportService::isStudentReport)
@@ -93,7 +93,7 @@ public class ReportService {
         return ConversationResponse.from(session, messages, runTraces);
     }
 
-    private static boolean isStudentReport(PsychologicalReport report) {
+    private static boolean isStudentReport(OpsArchiveRecord report) {
         return report != null && isStudentUser(report.getUser());
     }
 

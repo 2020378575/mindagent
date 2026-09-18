@@ -15,13 +15,13 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 
 @Entity
-@Table(name = "psychological_reports")
+@Table(name = "ops_archive_records")
 /**
- * 后台心理状态报告。
+ * 运维归档记录。
  *
- * <p>报告记录的是后台评估和工具执行状态，不会作为学生端展示内容。</p>
+ * <p>归档记录用于工具链状态审计，不作为研究工作区主展示。</p>
  */
-public class PsychologicalReport {
+public class OpsArchiveRecord {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)

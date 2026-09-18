@@ -1,7 +1,7 @@
 package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.config.MindBridgeProperties;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.file.Files;
@@ -29,7 +29,7 @@ public class LocalExcelReportWriter implements ExcelReportWriter {
     }
 
     @Override
-    public void write(PsychologicalReport report) {
+    public void write(OpsArchiveRecord report) {
         synchronized (lock) {
             try {
                 // 写文件需要串行化，防止多个高风险报告同时写入造成工作簿损坏。
@@ -71,14 +71,14 @@ public class LocalExcelReportWriter implements ExcelReportWriter {
     private void writeHeader(Row row) {
         String[] headers = {
                 "报告ID", "用户ID", "账号", "会话ID", "意图", "情绪标签", "情绪总分",
-                "风险等级", "置信度", "判断摘要", "对话内容", "对话时间"
+                "优先级", "置信度", "判断摘要", "对话内容", "对话时间"
         };
         for (int i = 0; i < headers.length; i++) {
             cell(row, i).setCellValue(headers[i]);
         }
     }
 
-    private void writeReport(Row row, PsychologicalReport report) {
+    private void writeReport(Row row, OpsArchiveRecord report) {
         cell(row, 0).setCellValue(nullSafe(report.getId()));
         cell(row, 1).setCellValue(nullSafe(report.getUser().getId()));
         cell(row, 2).setCellValue(report.getUser().getUsername());

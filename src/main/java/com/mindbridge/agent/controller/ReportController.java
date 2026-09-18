@@ -60,7 +60,7 @@ public class ReportController {
 
     @GetMapping("/admin/conversations/{sessionId}")
     public ConversationResponse conversation(@PathVariable String sessionId) {
-        // 点开任一后台记录时读取完整会话，便于辅导员回看上下文。
+        // 点开任一后台记录时读取完整会话，便于管理员回看上下文。
         return reportService.conversation(sessionId);
     }
 
