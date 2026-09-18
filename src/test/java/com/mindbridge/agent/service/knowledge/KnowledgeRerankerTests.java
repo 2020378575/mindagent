@@ -26,7 +26,7 @@ class KnowledgeRerankerTests {
                 new ObjectMapper());
 
         List<SearchResult> results = reranker.rerank("最近焦虑到睡不着，想知道怎么缓解", List.of(
-                SearchResult.of(1L, "a.md", "校园心理中心预约流程", 0.90),
+                SearchResult.of(1L, "a.md", "QLoRA NF4 12GB 适配器流程", 0.90),
                 SearchResult.of(2L, "b.md", "焦虑、入睡困难和睡前放松练习", 0.80),
                 SearchResult.of(3L, "c.md", "考试压力下的计划拆分", 0.20)
         ), 2);

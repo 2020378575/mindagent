@@ -1,0 +1,42 @@
+[
+  {
+    "id": "harness-decision-qlora",
+    "projectId": 1,
+    "question": "在 12GB GPU 约束下该选 LoRA 还是 QLoRA？",
+    "expectedIntent": "RESEARCH_DECISION",
+    "expectedSources": ["lora-vs-qlora-12gb.md"],
+    "requiredClaims": ["QLoRA", "12GB"],
+    "opposingClaims": ["LoRA"],
+    "forbiddenClaims": ["Excel", "MCP"]
+  },
+  {
+    "id": "harness-review-oom",
+    "projectId": 1,
+    "question": "run-019 的实验结果是否验证了 LoRA 会 OOM？",
+    "expectedIntent": "RESULT_REVIEW",
+    "expectedSources": ["oom-experiment-log.md"],
+    "requiredClaims": ["out of memory", "13.8"],
+    "opposingClaims": [],
+    "forbiddenClaims": ["Excel"]
+  },
+  {
+    "id": "harness-evidence-baseline",
+    "projectId": 1,
+    "question": "基线 README 使用了什么量化配置与学习率？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["baseline-readme.md"],
+    "requiredClaims": ["NF4", "2e-4"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "harness-chat",
+    "projectId": 1,
+    "question": "你好，今天天气怎么样？",
+    "expectedIntent": "GENERAL_CHAT",
+    "expectedSources": [],
+    "requiredClaims": [],
+    "opposingClaims": [],
+    "forbiddenClaims": ["Excel"]
+  }
+]

@@ -348,7 +348,7 @@ public class MindBridgeProperties {
         /** 是否在启动后生成 RAGAS 输入报告。 */
         private boolean enabled;
         /** 评测集 JSON 路径，支持 classpath: 或文件系统路径。 */
-        private String dataset = "classpath:rag-eval/mindbridge-rag-eval.json";
+        private String dataset = "classpath:rag-eval/evidencelab-rag-eval-v1.json";
         /** 评测链路使用的 TopK 元数据。 */
         private int topK = 4;
         /** 是否在报告生成后退出应用，便于命令行/CI 单独跑评测。 */
