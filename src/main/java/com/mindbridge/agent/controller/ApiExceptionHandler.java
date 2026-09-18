@@ -1,6 +1,7 @@
 package com.mindbridge.agent.controller;
 
 import com.mindbridge.agent.dto.ApiMessage;
+import com.mindbridge.agent.service.decision.DecisionValidationException;
 import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -16,6 +17,11 @@ import org.springframework.web.server.ResponseStatusException;
  * <p>把常见异常转换成稳定的 JSON 消息，前端可以直接显示错误原因。</p>
  */
 public class ApiExceptionHandler {
+
+    @ExceptionHandler(DecisionValidationException.class)
+    public ResponseEntity<ApiMessage> decisionValidation(DecisionValidationException exception) {
+        return ResponseEntity.badRequest().body(new ApiMessage(exception.getMessage()));
+    }
 
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiMessage> badRequest(IllegalArgumentException exception) {
