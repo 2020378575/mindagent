@@ -53,6 +53,16 @@ public class ResearchTaskController {
         this.researchTaskEventService = researchTaskEventService;
     }
 
+    @GetMapping
+    public List<ResearchTaskResponse> list(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @PathVariable Long projectId
+    ) {
+        return ownedList(() -> researchTaskService.list(currentUser.getId(), projectId)).stream()
+                .map(ResearchTaskResponse::from)
+                .toList();
+    }
+
     @PostMapping
     public ResearchTaskResponse create(
             @AuthenticationPrincipal CurrentUser currentUser,
@@ -134,6 +144,14 @@ public class ResearchTaskController {
     }
 
     private ResearchTask owned(Supplier<ResearchTask> action) {
+        try {
+            return action.get();
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage());
+        }
+    }
+
+    private List<ResearchTask> ownedList(Supplier<List<ResearchTask>> action) {
         try {
             return action.get();
         } catch (IllegalArgumentException exception) {

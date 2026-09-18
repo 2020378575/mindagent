@@ -45,7 +45,7 @@ final class ResearchScriptedAiClient implements AiClient {
                      "evidenceGaps":["missing multi-GPU ablation"],
                      "minimumExperiment":"train one epoch on 12GB GPU",
                      "successCriteria":"peak memory under 12GB",
-                     "confidence":0.8}
+                     "confidence":0.72}
                     """;
         }
         if (prompt.contains("ResearchAssistantAgent")) {

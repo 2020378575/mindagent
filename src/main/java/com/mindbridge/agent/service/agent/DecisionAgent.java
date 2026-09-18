@@ -64,16 +64,42 @@ public class DecisionAgent implements ResearchAgent {
     }
 
     private DecisionDraft draft(AgentContext context) {
+        DecisionDraft rawDraft;
         try {
             String raw = aiClient.complete(PromptTemplates.decisionDraftPrompt(
                     context.intent(),
                     context.modelInput(),
                     context.retrievedEvidence(),
                     context.critique()));
-            return parse(raw, context);
+            rawDraft = parse(raw, context);
         } catch (Exception exception) {
-            return heuristic(context);
+            rawDraft = heuristic(context);
         }
+        return sanitizeCitations(rawDraft, context);
+    }
+
+    private DecisionDraft sanitizeCitations(DecisionDraft draft, AgentContext context) {
+        java.util.Set<Long> retrieved = context.retrievedEvidence().stream()
+                .map(SearchResult::chunkId)
+                .filter(id -> id != null)
+                .collect(java.util.stream.Collectors.toSet());
+        List<Long> supporting = draft.supportingChunkIds().stream().filter(retrieved::contains).toList();
+        List<Long> opposing = draft.opposingChunkIds().stream().filter(retrieved::contains).toList();
+        double confidence = draft.confidence();
+        if (draft.evidenceGaps() != null && !draft.evidenceGaps().isEmpty() && confidence >= 0.8) {
+            confidence = 0.79;
+        }
+        return new DecisionDraft(
+                draft.question(),
+                draft.options(),
+                draft.recommendation(),
+                draft.rationale(),
+                supporting,
+                opposing,
+                draft.evidenceGaps(),
+                draft.minimumExperiment(),
+                draft.successCriteria(),
+                confidence);
     }
 
     private DecisionDraft parse(String raw, AgentContext context) throws Exception {

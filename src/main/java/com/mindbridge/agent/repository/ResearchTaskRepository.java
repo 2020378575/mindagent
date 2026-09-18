@@ -31,6 +31,8 @@ public interface ResearchTaskRepository extends JpaRepository<ResearchTask, Long
 
     List<ResearchTask> findByStatusAndUpdatedAtBefore(ResearchTaskStatus status, Instant updatedBefore);
 
+    List<ResearchTask> findByProject_IdAndOwner_IdOrderByUpdatedAtDesc(Long projectId, Long ownerId);
+
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""
             update ResearchTask t

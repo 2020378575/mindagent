@@ -36,7 +36,8 @@ public class AgentStatusController {
                 properties.getKnowledge().getRerankerCandidateLimit(),
                 properties.getMemory().isUseChroma(),
                 properties.getMemory().getTopK(),
-                realModelEnabled ? "正在使用真实大模型客户端。" : "当前模型 provider 配置不受支持。"
+                "EvidenceLab",
+                realModelEnabled ? "研究决策工作台已接入真实模型客户端。" : "当前模型 provider 配置不受支持。"
         );
     }
 
@@ -63,6 +64,7 @@ public class AgentStatusController {
             int rerankerCandidateLimit,
             boolean memoryChromaEnabled,
             int memoryTopK,
+            String product,
             String note
     ) {
     }

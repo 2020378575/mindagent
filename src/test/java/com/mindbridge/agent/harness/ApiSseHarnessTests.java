@@ -99,7 +99,7 @@ class ApiSseHarnessTests {
     @Test
     void adminAccountCannotStartStudentChat() {
         webTestClient.post()
-                .uri("/api/chat/stream")
+                .uri("/api/research/assistant/stream")
                 .headers(headers -> headers.setBasicAuth("admin", "admin123"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)
@@ -112,7 +112,7 @@ class ApiSseHarnessTests {
 
     private String postChat(String username, String password, String message) {
         EntityExchangeResult<String> result = webTestClient.post()
-                .uri("/api/chat/stream")
+                .uri("/api/research/assistant/stream")
                 .headers(headers -> headers.setBasicAuth(username, password))
                 .contentType(MediaType.APPLICATION_JSON)
                 .accept(MediaType.TEXT_EVENT_STREAM)

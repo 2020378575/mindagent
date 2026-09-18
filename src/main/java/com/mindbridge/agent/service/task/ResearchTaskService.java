@@ -82,6 +82,12 @@ public class ResearchTaskService {
                 .orElseThrow(() -> new IllegalArgumentException(TASK_NOT_FOUND_MESSAGE));
     }
 
+    @Transactional(readOnly = true)
+    public List<ResearchTask> list(Long userId, Long projectId) {
+        researchProjectService.requireOwnedProject(userId, projectId);
+        return researchTaskRepository.findByProject_IdAndOwner_IdOrderByUpdatedAtDesc(projectId, userId);
+    }
+
     @Transactional
     public boolean claimPendingTask(Long taskId) {
         return researchTaskRepository.claimPendingTask(taskId, Instant.now()) == 1;

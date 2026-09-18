@@ -7,6 +7,7 @@ import com.mindbridge.agent.domain.ResearchTaskType;
 import java.time.Instant;
 
 public record ResearchTaskResponse(
+        Long id,
         String publicId,
         ResearchTaskType type,
         ResearchTaskStatus status,
@@ -27,6 +28,7 @@ public record ResearchTaskResponse(
 ) {
     public static ResearchTaskResponse from(ResearchTask task) {
         return new ResearchTaskResponse(
+                task.getId(),
                 task.getPublicId(),
                 task.getType(),
                 task.getStatus(),
