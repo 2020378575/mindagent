@@ -1,7 +1,7 @@
 # EvidenceLab v1 Evaluation Results
 
 - Dataset version: evidencelab-rag-eval-v1.json
-- Git commit: e7512b89a8ac54fbb9fba07c9961614dc0f1715b
+- Git commit: f9456a45700fc41872ae08a57bdf07177ec2ef92
 - Intent accuracy: 1.0000
 - Recall@5: 0.9000
 - Claim-source support rate: 0.9500

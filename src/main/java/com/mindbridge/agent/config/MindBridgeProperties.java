@@ -185,7 +185,7 @@ public class MindBridgeProperties {
         /** 是否启用 Chroma 作为用户画像长期记忆的语义索引。 */
         private boolean useChroma;
         private String chromaBaseUrl = "http://localhost:8000";
-        private String chromaCollection = "mindbridge_user_memory";
+        private String chromaCollection = "evidencelab_user_memory";
         /** 每轮按当前输入召回的画像记忆数量。 */
         private int topK = 6;
 
@@ -267,7 +267,7 @@ public class MindBridgeProperties {
         /** 是否启用外部 Chroma 向量库。 */
         private boolean useChroma;
         private String chromaBaseUrl = "http://localhost:8000";
-        private String chromaCollection = "mindbridge_knowledge";
+        private String chromaCollection = "evidencelab_knowledge";
         private int chunkSize = 512;
         private int chunkOverlap = 64;
 
@@ -414,7 +414,7 @@ public class MindBridgeProperties {
         /** Excel 写入模式：local、http 或 mcp。 */
         private String mode = "local";
         private String url = "http://localhost:8081";
-        private String localPath = "./data/mindbridge-reports.xlsx";
+        private String localPath = "./data/evidencelab-reports.xlsx";
 
         public String getMode() {
             return mode;
@@ -445,7 +445,7 @@ public class MindBridgeProperties {
         /** 邮件预警模式：log、smtp、http 或 mcp。 */
         private String mode = "log";
         private String url = "http://localhost:8082";
-        private String from = "mindbridge@example.com";
+        private String from = "evidencelab-alerts@example.com";
         private List<String> recipients = new ArrayList<>(List.of("counselor@example.com"));
         private int maxRetries = 2;
         /** MCP Server 收到 send_risk_alert 工具调用后实际投递方式：log 或 smtp。 */

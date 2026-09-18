@@ -32,7 +32,7 @@ spring:
               url: ${MCP_SERVER_URL:http://localhost:${SERVER_PORT:8080}}
               sse-endpoint: ${MCP_SERVER_SSE_ENDPOINT:/sse}
   datasource:
-    url: ${DB_URL:jdbc:h2:file:./data/mindbridge;MODE=MySQL;DATABASE_TO_LOWER=TRUE}
+    url: ${DB_URL:jdbc:h2:file:./data/evidencelab;MODE=MySQL;DATABASE_TO_LOWER=TRUE}
     username: ${DB_USERNAME:sa}
     password: ${DB_PASSWORD:}
     driver-class-name: ${DB_DRIVER:org.h2.Driver}
@@ -103,7 +103,7 @@ mindbridge:
   memory:
     use-chroma: ${MEMORY_USE_CHROMA:${USE_CHROMA:true}}
     chroma-base-url: ${MEMORY_CHROMA_BASE_URL:${CHROMA_BASE_URL:http://localhost:8000}}
-    chroma-collection: ${MEMORY_CHROMA_COLLECTION:mindbridge_user_memory}
+    chroma-collection: ${MEMORY_CHROMA_COLLECTION:evidencelab_user_memory}
     top-k: ${MEMORY_TOP_K:6}
   embedding:
     base-url: ${OPENAI_BASE_URL:https://api.openai.com}
@@ -116,7 +116,7 @@ mindbridge:
     reranker-max-content-chars: ${RAG_RERANKER_MAX_CONTENT_CHARS:700}
     use-chroma: ${USE_CHROMA:true}
     chroma-base-url: ${CHROMA_BASE_URL:http://localhost:8000}
-    chroma-collection: ${CHROMA_COLLECTION:mindbridge_knowledge}
+    chroma-collection: ${CHROMA_COLLECTION:evidencelab_knowledge}
     chunk-size: ${KNOWLEDGE_CHUNK_SIZE:512}
     chunk-overlap: ${KNOWLEDGE_CHUNK_OVERLAP:64}
   rag-eval:
@@ -129,11 +129,11 @@ mindbridge:
     excel:
       mode: ${MCP_EXCEL_MODE:local}
       url: ${MCP_EXCEL_URL:http://localhost:8081}
-      local-path: ${MCP_EXCEL_LOCAL_PATH:./data/mindbridge-reports.xlsx}
+      local-path: ${MCP_EXCEL_LOCAL_PATH:./data/evidencelab-reports.xlsx}
     email:
       mode: ${MCP_EMAIL_MODE:log}
       url: ${MCP_EMAIL_URL:http://localhost:8082}
-      from: ${ALERT_MAIL_FROM:mindbridge-alerts@example.com}
+      from: ${ALERT_MAIL_FROM:evidencelab-alerts@example.com}
       recipients: ${ALERT_MAIL_RECIPIENTS:research-alerts@example.com}
       max-retries: ${ALERT_MAIL_MAX_RETRIES:2}
       mcp-server-delivery-mode: ${MCP_EMAIL_SERVER_DELIVERY_MODE:log}

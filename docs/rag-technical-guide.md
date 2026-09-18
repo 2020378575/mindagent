@@ -32,7 +32,7 @@ flowchart LR
     F --> H["OpenAI兼容 Embedding<br/>embeddingJson 可选"]
     G --> I["ChromaGateway.mirror<br/>可选向量索引"]
     H --> G
-    I --> J["Chroma collection<br/>mindbridge_knowledge"]
+    I --> J["Chroma collection<br/>evidencelab_knowledge"]
 
     K["研究输入"] --> L["AgentRuntimeService"]
     L --> M["MemoryAgent"]
@@ -97,7 +97,7 @@ flowchart LR
 - `anxiety-grounding-sleep.md`：焦虑、着陆练习、睡眠支持。
 - `campus-mental-health.md`：科研证据健康基础规则。
 - `crisis-safety-plan.md`：危机安全计划。
-- `help-seeking-campus-resources.md`：校园求助资源。
+- `baseline-readme.md`：基线训练配置。
 - `low-mood-motivation-social-support.md`：低落、动力和社交支持。
 - `privacy-boundaries-consent.md`：隐私、边界和同意。
 - `relationship-family-conflict.md`：人际和家庭冲突。
@@ -273,7 +273,7 @@ cosine(a, b) = dot(a, b) / (||a|| * ||b||)
 | --- | --- |
 | `USE_CHROMA` | `true` |
 | `CHROMA_BASE_URL` | `http://localhost:8000` |
-| `CHROMA_COLLECTION` | `mindbridge_knowledge` |
+| `CHROMA_COLLECTION` | `evidencelab_knowledge` |
 
 Docker Compose 中 Chroma 服务为：
 
@@ -531,7 +531,7 @@ Agent 顺序：
 
 `SupervisorAgent` 调用 `IntentClassifier` 得到三类意图：
 
-- `CHAT`：普通聊天、学习、编程、项目、课程、校园事务等。
+- `CHAT`：普通聊天、学习、编程、项目、课程、通用事务等。
 - `CONSULT`：明确研究求助、情绪困扰、压力、焦虑、低落、失眠等。
 - `RISK`：自杀、自残、伤人、严重绝望或即时危险信号。
 
@@ -569,7 +569,7 @@ query 改写 prompt 的关键要求：
 
 - 只输出查询词本身。
 - 不超过 40 个字。
-- 聚焦证据支持、校园求助流程、风险处理或情绪调节知识。
+- 聚焦证据支持、资料检索流程、失败诊断或实验复盘知识。
 
 充分性判断只允许输出：
 
@@ -627,7 +627,7 @@ INSUFFICIENT
 - 不注入知识库上下文。
 - 不主动做研究测评。
 - 不输出优先级、研究标签、诊断结论或报告口吻。
-- 对学习、编程、校园事务等普通问题直接回答。
+- 对学习、编程、通用事务等普通问题直接回答。
 
 这就是“动态路由 RAG”的关键。它防止模型把所有学生问题都解释为研究问题。
 
@@ -645,7 +645,7 @@ system prompt 会注入：
 
 ### 13.3 高风险规则
 
-当 `riskLevel == HIGH` 时，额外注入高风险处理规则：
+当 `riskLevel == HIGH` 时，额外注入高失败诊断规则：
 
 - 先回应情绪，再把重点放在当前安全。
 - 鼓励立刻联系可信任的人、学校运维、研究中心或当地紧急救助。
@@ -691,8 +691,8 @@ aiClient.stream(prepared.messages())
 | 对比项 | 知识库 RAG | 用户画像语义召回 |
 | --- | --- | --- |
 | 主存储 | `knowledge_chunks` | `user_memory_items` |
-| Chroma collection | `mindbridge_knowledge` | `mindbridge_user_memory` |
-| 数据来源 | 内置/管理员维护的研究知识和校园资源 | 从用户对话中抽取的长期偏好、支持需求、背景 |
+| Chroma collection | `evidencelab_knowledge` | `evidencelab_user_memory` |
+| 数据来源 | 内置/管理员维护的研究知识和研究资料 | 从用户对话中抽取的长期偏好、研究偏好与项目背景 |
 | 触发位置 | `KnowledgeAgent` | `MemoryAgent` |
 | 是否直接进入回答知识上下文 | 是 | 否，先形成 memoryBrief |
 | 是否按用户隔离 | 知识库默认全局共享 | 按 `userId` 过滤 |
@@ -718,7 +718,7 @@ aiClient.stream(prepared.messages())
 | `RAG_TOP_K` | `4` | 最终返回给回答 prompt 的检索结果数量 |
 | `USE_CHROMA` | `true` | 是否启用 Chroma 知识库索引 |
 | `CHROMA_BASE_URL` | `http://localhost:8000` | Chroma 服务地址 |
-| `CHROMA_COLLECTION` | `mindbridge_knowledge` | 知识库 collection |
+| `CHROMA_COLLECTION` | `evidencelab_knowledge` | 知识库 collection |
 | `KNOWLEDGE_CHUNK_SIZE` | `512` | 知识切块大小 |
 | `KNOWLEDGE_CHUNK_OVERLAP` | `64` | 知识切块 overlap |
 
@@ -738,7 +738,7 @@ aiClient.stream(prepared.messages())
 | --- | --- | --- |
 | `MEMORY_USE_CHROMA` | `${USE_CHROMA:true}` | 是否启用用户画像 Chroma 召回 |
 | `MEMORY_CHROMA_BASE_URL` | `${CHROMA_BASE_URL:http://localhost:8000}` | 用户画像 Chroma 地址 |
-| `MEMORY_CHROMA_COLLECTION` | `mindbridge_user_memory` | 用户画像 collection |
+| `MEMORY_CHROMA_COLLECTION` | `evidencelab_user_memory` | 用户画像 collection |
 | `MEMORY_TOP_K` | `6` | 每轮召回画像数量 |
 
 ### 16.4 RAG 评测
@@ -757,8 +757,8 @@ aiClient.stream(prepared.messages())
 
 默认情况下：
 
-- 数据库：H2 文件库 `./data/mindbridge`
-- 生成模型：Ollama，模型 `mindbridge-qwen2.5-7b-ft:latest`
+- 数据库：H2 文件库 `./data/evidencelab`
+- 生成模型：Ollama，模型 `evidencelab-qwen2.5-7b-ft:latest`
 - Chroma：默认启用，但服务不可用时会降级
 - Embedding：未设置 `OPENAI_API_KEY` 时不启用本地 embedding
 
@@ -781,8 +781,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=mysql
 
 默认两个 Chroma collection：
 
-- `mindbridge_knowledge`：知识库 RAG。
-- `mindbridge_user_memory`：用户画像长期记忆。
+- `evidencelab_knowledge`：知识库 RAG。
+- `evidencelab_user_memory`：用户画像长期记忆。
 
 ## 18. RAG 评测
 
@@ -824,11 +824,11 @@ src/main/resources/rag-eval/evidencelab-rag-eval-v1.json
 SPRING_MAIN_WEB_APPLICATION_TYPE=none \
 AI_PROVIDER=ollama \
 OLLAMA_BASE_URL=http://localhost:11434 \
-OLLAMA_MODEL=mindbridge-qwen2.5-7b-ft:latest \
+OLLAMA_MODEL=evidencelab-qwen2.5-7b-ft:latest \
 USE_CHROMA=false \
 RAG_EVAL_ENABLED=true \
 RAG_EVAL_EXIT_AFTER_RUN=true \
-DB_URL='jdbc:h2:mem:mindbridge-rag-eval;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1' \
+DB_URL='jdbc:h2:mem:evidencelab-rag-eval;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1' \
 JAVA_HOME="$PWD/.tools/amazon-corretto-17.jdk/Contents/Home" \
   .tools/apache-maven-3.9.9/bin/mvn -Dmaven.repo.local=.m2/repository spring-boot:run
 ```
@@ -1009,7 +1009,7 @@ bm25 = 0.35
 `KnowledgeAgent` 的 query 改写是召回质量的入口。可观察 `AgentRunTrace.knowledgeQuery`，重点检查：
 
 - 是否保留了用户真正的问题。
-- 是否加入了相关校园资源或风险处理词。
+- 是否加入了相关研究资料或失败诊断词。
 - 是否过度抽象，比如只剩“证据支持”。
 - 是否过度具体，导致召回变窄。
 
