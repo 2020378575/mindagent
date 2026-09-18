@@ -10,6 +10,7 @@ public record RagEvalReport(
         int totalCases,
         long passedCases,
         long failedCases,
+        EvidenceLabMetrics metrics,
         List<RagEndToEndCaseResult> cases
 ) {
 }

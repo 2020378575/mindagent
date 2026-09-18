@@ -5,23 +5,26 @@ import com.mindbridge.agent.domain.ChatMessage;
 import com.mindbridge.agent.domain.ChatSession;
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.MessageRole;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.ProjectStatus;
+import com.mindbridge.agent.domain.ResearchProject;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.dto.ChatRequest;
 import com.mindbridge.agent.dto.ChatStreamEvent;
+import com.mindbridge.agent.dto.CreateResearchProjectRequest;
 import com.mindbridge.agent.repository.ChatMessageRepository;
 import com.mindbridge.agent.repository.ChatSessionRepository;
-import com.mindbridge.agent.repository.PsychologicalReportRepository;
 import com.mindbridge.agent.repository.UserAccountRepository;
+import com.mindbridge.agent.service.agent.AgentContext;
+import com.mindbridge.agent.service.agent.AgentRunResult;
+import com.mindbridge.agent.service.agent.AgentRuntimeService;
 import com.mindbridge.agent.service.ai.AiClient;
 import com.mindbridge.agent.service.ai.AiMessage;
 import com.mindbridge.agent.service.ai.PromptTemplates;
 import com.mindbridge.agent.service.knowledge.SearchResult;
-import com.mindbridge.agent.service.agent.AgentRunResult;
-import com.mindbridge.agent.service.agent.AgentRuntimeService;
 import com.mindbridge.agent.service.memory.ShortTermMemoryService;
 import com.mindbridge.agent.service.memory.UserProfileMemoryService;
+import com.mindbridge.agent.service.project.ResearchProjectService;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -37,58 +40,54 @@ import reactor.core.scheduler.Schedulers;
 
 @Service
 /**
- * 学生聊天主流程服务。
- *
- * <p>负责会话落库、模型流式调用和后台报告触发；意图路由、记忆读取、RAG 与风险评估
- * 由 AgentRuntimeService 中的多 Agent loop 完成。</p>
+ * 临时聊天入口。研究任务由 ResearchTask handlers 驱动；此处仍走同一套研究 Agent 环。
  */
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
+    private static final String DEFAULT_PROJECT_NAME = "Default project";
+    private static final String DEFAULT_PROJECT_OBJECTIVE =
+            "Temporary workspace for existing conversations until the research workspace is ready.";
 
     private final UserAccountRepository userAccountRepository;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
-    private final PsychologicalReportRepository reportRepository;
     private final MindBridgeProperties properties;
-    private final ToolOrchestrationService toolOrchestrationService;
     private final PrivacySanitizer privacySanitizer;
     private final ShortTermMemoryService shortTermMemoryService;
     private final UserProfileMemoryService userProfileMemoryService;
     private final AgentRuntimeService agentRuntimeService;
     private final AgentRunTraceService agentRunTraceService;
+    private final ResearchProjectService researchProjectService;
     private final AiClient aiClient;
 
     public ChatService(
             UserAccountRepository userAccountRepository,
             ChatSessionRepository chatSessionRepository,
             ChatMessageRepository chatMessageRepository,
-            PsychologicalReportRepository reportRepository,
             MindBridgeProperties properties,
-            ToolOrchestrationService toolOrchestrationService,
             PrivacySanitizer privacySanitizer,
             ShortTermMemoryService shortTermMemoryService,
             UserProfileMemoryService userProfileMemoryService,
             AgentRuntimeService agentRuntimeService,
             AgentRunTraceService agentRunTraceService,
+            ResearchProjectService researchProjectService,
             AiClient aiClient
     ) {
         this.userAccountRepository = userAccountRepository;
         this.chatSessionRepository = chatSessionRepository;
         this.chatMessageRepository = chatMessageRepository;
-        this.reportRepository = reportRepository;
         this.properties = properties;
-        this.toolOrchestrationService = toolOrchestrationService;
         this.privacySanitizer = privacySanitizer;
         this.shortTermMemoryService = shortTermMemoryService;
         this.userProfileMemoryService = userProfileMemoryService;
         this.agentRuntimeService = agentRuntimeService;
         this.agentRunTraceService = agentRunTraceService;
+        this.researchProjectService = researchProjectService;
         this.aiClient = aiClient;
     }
 
     public Flux<ServerSentEvent<ChatStreamEvent>> streamChat(Long userId, ChatRequest request) {
-        // 聊天接口使用 SSE 流式返回；数据库读写放到 boundedElastic，避免阻塞响应线程。
         return Mono.fromCallable(() -> prepare(userId, request))
                 .subscribeOn(Schedulers.boundedElastic())
                 .flatMapMany(this::streamPrepared)
@@ -104,23 +103,22 @@ public class ChatService {
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
         ChatSession session = resolveSession(user, request.sessionId(), input);
         Instant startedAt = Instant.now();
-        AgentRunResult agentRun = agentRuntimeService.run(user, session, input, modelInput);
+        AgentContext context = new AgentContext(
+                null,
+                user.getId(),
+                session.getProject() == null ? null : session.getProject().getId(),
+                input,
+                modelInput);
+        AgentRunResult agentRun = agentRuntimeService.run(context);
         Instant completedAt = Instant.now();
         ChatMessage userMessage = saveMessage(user, session, MessageRole.USER, input);
         agentRunTraceService.saveRun(user, session, userMessage, input, agentRun, startedAt, completedAt);
         rememberUserProfile(user, session, input, agentRun.memoryBrief());
 
-        PsychologicalReport report = null;
-        if (agentRun.requiresReport()) {
-            report = saveReport(user, session, input, agentRun.intent(), agentRun.assessment());
-        }
-
-        RiskLevel riskLevel = agentRun.riskLevel() == null ? RiskLevel.LOW : agentRun.riskLevel();
         List<AiMessage> messages = agentRun.responseMessages().isEmpty()
-                ? buildMessages(user, agentRun.intent(), riskLevel, agentRun.retrievedKnowledge(), agentRun.modelHistory())
+                ? buildMessages(user, agentRun.intent(), agentRun.retrievedEvidence(), List.of())
                 : agentRun.responseMessages();
-        Long reportId = report == null ? null : report.getId();
-        return new PreparedConversation(user, session, agentRun.intent(), riskLevel, messages, reportId);
+        return new PreparedConversation(user, session, agentRun.intent(), RiskLevel.LOW, messages);
     }
 
     private Flux<ServerSentEvent<ChatStreamEvent>> streamPrepared(PreparedConversation prepared) {
@@ -144,10 +142,6 @@ public class ChatService {
             if (!assistantReply.isEmpty()) {
                 saveMessage(prepared.user(), prepared.session(), MessageRole.ASSISTANT, assistantReply.toString());
             }
-            // 工具链在模型回复完成后异步执行，不打断学生端正在进行的对话体验。
-            if (prepared.reportId() != null) {
-                toolOrchestrationService.handleAsync(prepared.reportId());
-            }
             return event("done", ChatStreamEvent.done(prepared.session().getPublicId()));
         }).subscribeOn(Schedulers.boundedElastic());
 
@@ -162,8 +156,21 @@ public class ChatService {
         ChatSession session = new ChatSession();
         session.setPublicId(UUID.randomUUID().toString().replace("-", ""));
         session.setUser(user);
+        session.setProject(resolveProject(user));
         session.setTitle(input.length() > 36 ? input.substring(0, 36) : input);
         return chatSessionRepository.save(session);
+    }
+
+    private ResearchProject resolveProject(UserAccount user) {
+        return researchProjectService.list(user.getId()).stream()
+                .filter(project -> project.getStatus() == ProjectStatus.ACTIVE)
+                .findFirst()
+                .orElseGet(() -> researchProjectService.create(
+                        user.getId(),
+                        new CreateResearchProjectRequest(
+                                DEFAULT_PROJECT_NAME,
+                                DEFAULT_PROJECT_OBJECTIVE,
+                                null)));
     }
 
     private ChatMessage saveMessage(UserAccount user, ChatSession session, MessageRole role, String content) {
@@ -187,50 +194,22 @@ public class ChatService {
         }
     }
 
-    private PsychologicalReport saveReport(
-            UserAccount user,
-            ChatSession session,
-            String content,
-            IntentType intent,
-            PsychologyAssessment assessment
-    ) {
-        PsychologicalReport report = new PsychologicalReport();
-        report.setUser(user);
-        report.setSession(session);
-        report.setContent(content);
-        report.setIntent(intent);
-        report.setEmotion(assessment.emotion());
-        report.setEmotionScore(assessment.emotionScore());
-        report.setRiskLevel(assessment.risk());
-        report.setConfidence(assessment.confidence());
-        report.setSummary(assessment.summary());
-        return reportRepository.save(report);
-    }
-
     private List<AiMessage> buildMessages(
             UserAccount user,
             IntentType intent,
-            RiskLevel riskLevel,
             List<SearchResult> retrieved,
             List<AiMessage> history
     ) {
-        // 检索片段只作为系统上下文给模型使用，不直接展示后台评估信息给学生。
         String context = String.join("\n\n", retrieved.stream()
                 .map(result -> "- [" + result.source() + "] " + result.content())
                 .toList());
         List<AiMessage> messages = new ArrayList<>();
-        messages.add(PromptTemplates.answerSystemPrompt(intent, riskLevel, context, user.getDisplayName()));
-
-        int limit = messageWindowLimit();
+        messages.add(PromptTemplates.answerSystemPrompt(intent, context, user.getDisplayName()));
+        int limit = Math.max(2, properties.getChat().getHistoryLimit() * 2);
         history.stream()
                 .skip(Math.max(0, history.size() - limit))
                 .forEach(messages::add);
         return messages;
-    }
-
-    private int messageWindowLimit() {
-        // history-limit 以轮次理解，这里乘 2 保留用户和助手两侧消息。
-        return Math.max(2, properties.getChat().getHistoryLimit() * 2);
     }
 
     private ServerSentEvent<ChatStreamEvent> event(String name, ChatStreamEvent data) {
@@ -242,8 +221,7 @@ public class ChatService {
             ChatSession session,
             IntentType intent,
             RiskLevel riskLevel,
-            List<AiMessage> messages,
-            Long reportId
+            List<AiMessage> messages
     ) {
     }
 }

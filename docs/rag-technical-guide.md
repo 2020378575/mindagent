@@ -4,22 +4,22 @@
 
 RAG 是 Retrieval-Augmented Generation，即检索增强生成。它的核心思想是：模型生成回答前，先从可控知识库中检索和当前问题相关的资料，再把这些资料作为上下文交给模型生成回答。
 
-在 MindBridge 中，RAG 不只是一个“向量库查询”功能，而是被放进校园心理关怀的多 Agent 流程里，承担三个目标：
+在 EvidenceLab 中，RAG 不只是一个“向量库查询”功能，而是被放进研究证据工作区的多 Agent 流程里，承担三个目标：
 
-1. 降低幻觉：心理支持、校园求助流程、危机安全建议等内容优先来自项目内置或管理员维护的知识库。
-2. 控制边界：普通聊天、学习、编程、校园事务不触发心理 RAG，避免把正常问题过度心理化。
-3. 提升安全性：风险场景中，RAG 和 RiskGuardian 的风险评估共同约束回复，模型不能直接输出后台风险等级、诊断结论或危险细节。
+1. 降低幻觉：方法对比、实验配置、失败日志等内容优先来自项目内置或管理员维护的知识库。
+2. 控制边界：普通闲聊不强制进入证据检索，避免把非研究问题过度证据化。
+3. 提升可控性：决策与复核路径中，RAG 与 Critic 共同约束回复，模型不能编造引用或暴露内部工具链细节。
 
 项目中的 RAG 有两类语义检索能力：
 
-- 知识库 RAG：面向心理支持知识、校园资源、风险策略等文档，服务最终回答生成。
+- 知识库 RAG：面向论文、实验日志、配置说明等文档，服务最终回答生成。
 - 用户画像语义召回：面向用户长期偏好和支持需求，辅助 MemoryAgent 生成记忆摘要。它不直接替代知识库 RAG，但会影响 query 改写和回复策略。
 
 本文重点讲知识库 RAG，同时单独说明用户画像召回与它的关系。
 
 ## 2. 总体架构
 
-MindBridge 的 RAG 采用“数据库主存储 + 可选 Chroma 向量索引 + BM25 本地兜底 + Agent 路由”的架构。
+EvidenceLab 的 RAG 采用“数据库主存储 + 可选 Chroma 向量索引 + BM25 本地兜底 + Agent 路由”的架构。
 
 ```mermaid
 flowchart LR
@@ -32,21 +32,21 @@ flowchart LR
     F --> H["OpenAI兼容 Embedding<br/>embeddingJson 可选"]
     G --> I["ChromaGateway.mirror<br/>可选向量索引"]
     H --> G
-    I --> J["Chroma collection<br/>mindbridge_knowledge"]
+    I --> J["Chroma collection<br/>evidencelab_knowledge"]
 
-    K["学生输入"] --> L["AgentRuntimeService"]
+    K["研究输入"] --> L["AgentRuntimeService"]
     L --> M["MemoryAgent"]
-    M --> N["SupervisorAgent<br/>CHAT / CONSULT / RISK"]
-    N -->|CHAT| O["CompanionAgent<br/>不查RAG"]
+    M --> N["SupervisorAgent<br/>GENERAL_CHAT / EVIDENCE_QUERY / RESEARCH_DECISION / RESULT_REVIEW"]
+    N -->|CHAT| O["ResearchAssistantAgent<br/>不查RAG"]
     N -->|CONSULT/RISK| P["KnowledgeAgent<br/>query改写 + RAG检索"]
-    P --> Q["RiskGuardianAgent"]
-    Q --> R["CounselorAgent<br/>RAG上下文 + 风险策略"]
+    P --> Q["EvidenceCriticAgent"]
+    Q --> R["DecisionAgent<br/>RAG上下文 + 风险策略"]
     R --> S["AiClient.stream<br/>SSE流式回复"]
 ```
 
 ### 2.1 关键设计点
 
-- 路由优先：`SupervisorAgent` 先判断 `CHAT / CONSULT / RISK`。只有 `CONSULT` 和 `RISK` 触发 `KnowledgeAgent`。
+- 路由优先：`SupervisorAgent` 先判断 `GENERAL_CHAT / EVIDENCE_QUERY / RESEARCH_DECISION / RESULT_REVIEW`。只有 `CONSULT` 和 `RISK` 触发 `KnowledgeAgent`。
 - 数据库是主存储：知识切块统一保存到 `knowledge_chunks` 表。Chroma 只是可选索引层，不是唯一数据源。
 - 检索是混合式：优先查 Chroma 或本地向量，再同时跑 BM25，最后按加权分数融合。
 - 失败可降级：Chroma 不可用、embedding API 未配置或调用失败时，系统仍可通过 BM25 检索工作。
@@ -83,7 +83,7 @@ flowchart LR
 | 文件解析 | `service/knowledge/KnowledgeFileService.java` | 支持 PDF、Markdown、txt，限制 10MB |
 | 管理接口 | `controller/KnowledgeController.java` | `POST /api/admin/knowledge` 和 `/file` |
 | RAG Agent | `service/agent/KnowledgeAgent.java` | query 改写、检索、充分性判断、二次检索 |
-| 回复 Agent | `service/agent/CounselorAgent.java` | 将 RAG 命中、风险评估和记忆摘要组合进回复 prompt |
+| 回复 Agent | `service/agent/DecisionAgent.java` | 将 RAG 命中、风险评估和记忆摘要组合进回复 prompt |
 | Prompt 模板 | `service/ai/PromptTemplates.java` | 控制回答边界、知识注入和高风险规则 |
 | RAG 评测 | `service/knowledge/eval/*` 和 `eval/run-ragas-eval.py` | 生成 RAGAS 输入报告并运行质量指标 |
 
@@ -95,9 +95,9 @@ flowchart LR
 
 - `academic-stress-exam-adjustment.md`：学业压力、考试调整。
 - `anxiety-grounding-sleep.md`：焦虑、着陆练习、睡眠支持。
-- `campus-mental-health.md`：校园心理健康基础规则。
+- `campus-mental-health.md`：科研证据健康基础规则。
 - `crisis-safety-plan.md`：危机安全计划。
-- `help-seeking-campus-resources.md`：校园求助资源。
+- `baseline-readme.md`：基线训练配置。
 - `low-mood-motivation-social-support.md`：低落、动力和社交支持。
 - `privacy-boundaries-consent.md`：隐私、边界和同意。
 - `relationship-family-conflict.md`：人际和家庭冲突。
@@ -114,7 +114,7 @@ JSON 文本入口：
 ```bash
 curl -u admin:admin123 \
   -H 'Content-Type: application/json' \
-  -d '{"source":"sleep-guide","content":"失眠时可先固定起床时间，减少睡前屏幕刺激，必要时联系校心理中心。"}' \
+  -d '{"source":"sleep-guide","content":"失眠时可先固定起床时间，减少睡前屏幕刺激，必要时联系校研究中心。"}' \
   http://localhost:8080/api/admin/knowledge
 ```
 
@@ -273,7 +273,7 @@ cosine(a, b) = dot(a, b) / (||a|| * ||b||)
 | --- | --- |
 | `USE_CHROMA` | `true` |
 | `CHROMA_BASE_URL` | `http://localhost:8000` |
-| `CHROMA_COLLECTION` | `mindbridge_knowledge` |
+| `CHROMA_COLLECTION` | `evidencelab_knowledge` |
 
 Docker Compose 中 Chroma 服务为：
 
@@ -454,8 +454,8 @@ private static final double BM25_WEIGHT = 0.35;
 
 这个配比体现了项目的偏好：
 
-- 向量检索更适合心理表达的语义相似，例如“撑不住”“没有希望”“想消失”。
-- BM25 更适合精确术语和规则命中，例如“心理中心”“辅导员”“自伤”“睡眠”。
+- 向量检索更适合研究表达的语义相似，例如“撑不住”“没有希望”“想消失”。
+- BM25 更适合精确术语和规则命中，例如“研究中心”“运维”“运维”“睡眠”。
 
 ### 10.6 二阶段 reranker
 
@@ -509,9 +509,9 @@ Agent 顺序：
 1. `MemoryAgent`
 2. `SupervisorAgent`
 3. `KnowledgeAgent`
-4. `RiskGuardianAgent`
-5. `CompanionAgent`
-6. `CounselorAgent`
+4. `EvidenceCriticAgent`
+5. `ResearchAssistantAgent`
+6. `DecisionAgent`
 
 每个 Agent 通过 `supports(context)` 判断是否接手。
 
@@ -525,14 +525,14 @@ Agent 顺序：
 - 让模型从最近对话中生成 1 到 3 条和当前输入相关的记忆摘要。
 - 把用户画像和对话记忆合并成 `memoryBrief`。
 
-这个 `memoryBrief` 后续会进入 `KnowledgeAgent.rewriteQuery()`。例如用户之前提到“我不太敢找辅导员”，当前又说“最近还是睡不着”，query 改写时就更可能加入“校园心理中心、辅导员、睡眠焦虑”等检索词。
+这个 `memoryBrief` 后续会进入 `KnowledgeAgent.rewriteQuery()`。例如用户之前提到“我不太敢找运维”，当前又说“最近还是睡不着”，query 改写时就更可能加入“科研证据中心、运维、睡眠焦虑”等检索词。
 
 ### 12.2 SupervisorAgent
 
 `SupervisorAgent` 调用 `IntentClassifier` 得到三类意图：
 
-- `CHAT`：普通聊天、学习、编程、项目、课程、校园事务等。
-- `CONSULT`：明确心理求助、情绪困扰、压力、焦虑、低落、失眠等。
+- `CHAT`：普通聊天、学习、编程、项目、课程、通用事务等。
+- `CONSULT`：明确研究求助、情绪困扰、压力、焦虑、低落、失眠等。
 - `RISK`：自杀、自残、伤人、严重绝望或即时危险信号。
 
 如果是 `CHAT`，它会直接标记：
@@ -542,7 +542,7 @@ context.markKnowledgeHandled();
 context.markRiskAssessed();
 ```
 
-这意味着普通问题不会触发知识库检索和心理风险评估，而是交给 `CompanionAgent`。
+这意味着普通问题不会触发知识库检索和研究风险评估，而是交给 `ResearchAssistantAgent`。
 
 ### 12.3 KnowledgeAgent
 
@@ -558,9 +558,9 @@ context.intentRouted()
 
 执行步骤：
 
-1. `rewriteQuery(context)`：调用模型把学生输入和记忆摘要改写成不超过 40 字的中文检索 query。
+1. `rewriteQuery(context)`：调用模型把研究输入和记忆摘要改写成不超过 40 字的中文检索 query。
 2. `knowledgeService.retrieve(query, topK)`：执行混合检索。
-3. `isKnowledgeEnough(context, retrieved)`：调用模型判断检索结果是否足够支持后续心理关怀回答。
+3. `isKnowledgeEnough(context, retrieved)`：调用模型判断检索结果是否足够支持后续研究关怀回答。
 4. 如果不足，调用 `refineQuery()` 生成更具体的 query。
 5. 用 refined query 再检索一次。
 6. 把最终 query 和结果写回 `AgentContext`。
@@ -569,7 +569,7 @@ query 改写 prompt 的关键要求：
 
 - 只输出查询词本身。
 - 不超过 40 个字。
-- 聚焦心理支持、校园求助流程、风险处理或情绪调节知识。
+- 聚焦证据支持、资料检索流程、失败诊断或实验复盘知识。
 
 充分性判断只允许输出：
 
@@ -580,18 +580,18 @@ INSUFFICIENT
 
 这相当于给 RAG 加了一个轻量 query planning 和 self-check。
 
-### 12.4 RiskGuardianAgent
+### 12.4 EvidenceCriticAgent
 
-`RiskGuardianAgent` 在 RAG 之后执行。它调用 `PsychologicalAssessmentService` 生成后台心理评估，并做高风险硬兜底：
+`EvidenceCriticAgent` 在 RAG 之后执行。它调用 `运维AssessmentService` 生成后台研究评估，并做高风险硬兜底：
 
 - 如果 `SupervisorAgent` 已经把意图判为 `RISK`，但模型评估没有给出 `HIGH`，则强制提升为 `HIGH`。
-- 后续 `CounselorAgent` 会结合该风险结果制定回复策略。
+- 后续 `DecisionAgent` 会结合该风险结果制定回复策略。
 
 这保证安全判断不完全依赖自由生成模型。
 
-### 12.5 CounselorAgent
+### 12.5 DecisionAgent
 
-`CounselorAgent` 负责咨询和风险场景的最终回复规划。
+`DecisionAgent` 负责咨询和风险场景的最终回复规划。
 
 它先生成一个 2 到 3 句的回复策略，输入包括：
 
@@ -604,7 +604,7 @@ INSUFFICIENT
 然后构造最终 `AiMessage` 列表：
 
 1. `PromptTemplates.answerSystemPrompt(intent, riskLevel, knowledgeContext, displayName)`
-2. 当前由 CounselorAgent 负责回复的 system message。
+2. 当前由 DecisionAgent 负责回复的 system message。
 3. 最近对话历史。
 
 `knowledgeContext` 的格式：
@@ -625,11 +625,11 @@ INSUFFICIENT
 如果意图是 `CHAT`：
 
 - 不注入知识库上下文。
-- 不主动做心理测评。
-- 不输出风险等级、心理标签、诊断结论或报告口吻。
-- 对学习、编程、校园事务等普通问题直接回答。
+- 不主动做研究测评。
+- 不输出优先级、研究标签、诊断结论或报告口吻。
+- 对学习、编程、通用事务等普通问题直接回答。
 
-这就是“动态路由 RAG”的关键。它防止模型把所有学生问题都解释为心理问题。
+这就是“动态路由 RAG”的关键。它防止模型把所有学生问题都解释为研究问题。
 
 ### 13.2 CONSULT/RISK 模式
 
@@ -637,19 +637,19 @@ INSUFFICIENT
 
 system prompt 会注入：
 
-- 角色：校园心理关怀智能体。
-- 边界：不诊断疾病、不开药、不替代持证心理咨询师。
-- 知识约束：优先基于检索知识回答；知识不足时明确说明，不编造心理学术语、流程或数据。
+- 角色：科研证据关怀智能体。
+- 边界：不诊断疾病、不开药、不替代持证研究咨询师。
+- 知识约束：优先基于检索知识回答；知识不足时明确说明，不编造研究学术语、流程或数据。
 - 表达要求：共情、谨慎、非评判，给 2 到 4 个可执行小步骤。
-- 禁止暴露：不输出风险等级、心理报告、评估分数或后台判断标签。
+- 禁止暴露：不输出优先级、研究报告、评估分数或后台判断标签。
 
 ### 13.3 高风险规则
 
-当 `riskLevel == HIGH` 时，额外注入高风险处理规则：
+当 `riskLevel == HIGH` 时，额外注入高失败诊断规则：
 
 - 先回应情绪，再把重点放在当前安全。
-- 鼓励立刻联系可信任的人、学校辅导员、心理中心或当地紧急救助。
-- 不提供任何自伤、伤人、危险操作的细节或方法。
+- 鼓励立刻联系可信任的人、学校运维、研究中心或当地紧急救助。
+- 不提供任何运维、伤人、危险操作的细节或方法。
 - 语气温和但明确，给出可马上执行的安全步骤。
 
 这些规则来自代码中的 prompt，而不是依赖模型自己临场发挥。
@@ -673,7 +673,7 @@ aiClient.stream(prepared.messages())
 以 SSE token 流返回前端。助手回复完成后：
 
 1. 保存 assistant message。
-2. 如果本轮需要心理报告，异步执行工具链。
+2. 如果本轮需要研究报告，异步执行工具链。
 3. 返回 `done` 事件。
 
 所以，RAG 在用户体验上表现为“回答更有依据、更安全”，而不是直接把检索结果原文贴给用户。
@@ -691,8 +691,8 @@ aiClient.stream(prepared.messages())
 | 对比项 | 知识库 RAG | 用户画像语义召回 |
 | --- | --- | --- |
 | 主存储 | `knowledge_chunks` | `user_memory_items` |
-| Chroma collection | `mindbridge_knowledge` | `mindbridge_user_memory` |
-| 数据来源 | 内置/管理员维护的心理知识和校园资源 | 从用户对话中抽取的长期偏好、支持需求、背景 |
+| Chroma collection | `evidencelab_knowledge` | `evidencelab_user_memory` |
+| 数据来源 | 内置/管理员维护的研究知识和研究资料 | 从用户对话中抽取的长期偏好、研究偏好与项目背景 |
 | 触发位置 | `KnowledgeAgent` | `MemoryAgent` |
 | 是否直接进入回答知识上下文 | 是 | 否，先形成 memoryBrief |
 | 是否按用户隔离 | 知识库默认全局共享 | 按 `userId` 过滤 |
@@ -718,7 +718,7 @@ aiClient.stream(prepared.messages())
 | `RAG_TOP_K` | `4` | 最终返回给回答 prompt 的检索结果数量 |
 | `USE_CHROMA` | `true` | 是否启用 Chroma 知识库索引 |
 | `CHROMA_BASE_URL` | `http://localhost:8000` | Chroma 服务地址 |
-| `CHROMA_COLLECTION` | `mindbridge_knowledge` | 知识库 collection |
+| `CHROMA_COLLECTION` | `evidencelab_knowledge` | 知识库 collection |
 | `KNOWLEDGE_CHUNK_SIZE` | `512` | 知识切块大小 |
 | `KNOWLEDGE_CHUNK_OVERLAP` | `64` | 知识切块 overlap |
 
@@ -738,7 +738,7 @@ aiClient.stream(prepared.messages())
 | --- | --- | --- |
 | `MEMORY_USE_CHROMA` | `${USE_CHROMA:true}` | 是否启用用户画像 Chroma 召回 |
 | `MEMORY_CHROMA_BASE_URL` | `${CHROMA_BASE_URL:http://localhost:8000}` | 用户画像 Chroma 地址 |
-| `MEMORY_CHROMA_COLLECTION` | `mindbridge_user_memory` | 用户画像 collection |
+| `MEMORY_CHROMA_COLLECTION` | `evidencelab_user_memory` | 用户画像 collection |
 | `MEMORY_TOP_K` | `6` | 每轮召回画像数量 |
 
 ### 16.4 RAG 评测
@@ -746,7 +746,7 @@ aiClient.stream(prepared.messages())
 | 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
 | `RAG_EVAL_ENABLED` | `false` | 启动后是否生成 RAGAS 输入报告 |
-| `RAG_EVAL_DATASET` | `classpath:rag-eval/mindbridge-rag-eval.json` | 评测集 |
+| `RAG_EVAL_DATASET` | `classpath:rag-eval/evidencelab-rag-eval-v1.json` | 评测集 |
 | `RAG_EVAL_TOP_K` | `4` | 评测检索 topK |
 | `RAG_EVAL_EXIT_AFTER_RUN` | `false` | 报告生成后是否退出应用 |
 | `RAG_EVAL_OUTPUT_PATH` | `target/rag-eval-report.json` | Java 端报告输出 |
@@ -757,8 +757,8 @@ aiClient.stream(prepared.messages())
 
 默认情况下：
 
-- 数据库：H2 文件库 `./data/mindbridge`
-- 生成模型：Ollama，模型 `mindbridge-qwen2.5-7b-ft:latest`
+- 数据库：H2 文件库 `./data/evidencelab`
+- 生成模型：Ollama，模型 `evidencelab-qwen2.5-7b-ft:latest`
 - Chroma：默认启用，但服务不可用时会降级
 - Embedding：未设置 `OPENAI_API_KEY` 时不启用本地 embedding
 
@@ -781,8 +781,8 @@ mvn spring-boot:run -Dspring-boot.run.profiles=mysql
 
 默认两个 Chroma collection：
 
-- `mindbridge_knowledge`：知识库 RAG。
-- `mindbridge_user_memory`：用户画像长期记忆。
+- `evidencelab_knowledge`：知识库 RAG。
+- `evidencelab_user_memory`：用户画像长期记忆。
 
 ## 18. RAG 评测
 
@@ -800,7 +800,7 @@ Python 脚本 `eval/run-ragas-eval.py` 再读取这个报告并运行 RAGAS。
 默认评测集：
 
 ```text
-src/main/resources/rag-eval/mindbridge-rag-eval.json
+src/main/resources/rag-eval/evidencelab-rag-eval-v1.json
 ```
 
 该默认评测集包含 100 条人工整理样本，覆盖全部 9 个内置知识文件，风险分布为 45 条 LOW、40 条 MEDIUM、15 条 HIGH。完整评测会逐条执行检索与模型回答生成，运行时间和模型调用成本会明显高于早期 10 条 smoke set；只调试评测链路时，可以通过 `RAG_EVAL_DATASET` 指向较小的自定义 JSON 数据集。
@@ -813,7 +813,7 @@ src/main/resources/rag-eval/mindbridge-rag-eval.json
 - `expectedTerms`：人工分析的期望关键词。
 - `referenceAnswer`：参考答案。
 - `expectedIntent`：期望路由。
-- `expectedRiskLevel`：期望风险等级。
+- `expectedIntent`：期望优先级。
 - `forbiddenAnswerTerms`：回答中不应出现的词。
 
 ### 18.2 Java 端生成 RAGAS 输入
@@ -824,11 +824,11 @@ src/main/resources/rag-eval/mindbridge-rag-eval.json
 SPRING_MAIN_WEB_APPLICATION_TYPE=none \
 AI_PROVIDER=ollama \
 OLLAMA_BASE_URL=http://localhost:11434 \
-OLLAMA_MODEL=mindbridge-qwen2.5-7b-ft:latest \
+OLLAMA_MODEL=evidencelab-qwen2.5-7b-ft:latest \
 USE_CHROMA=false \
 RAG_EVAL_ENABLED=true \
 RAG_EVAL_EXIT_AFTER_RUN=true \
-DB_URL='jdbc:h2:mem:mindbridge-rag-eval;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1' \
+DB_URL='jdbc:h2:mem:evidencelab-rag-eval;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1' \
 JAVA_HOME="$PWD/.tools/amazon-corretto-17.jdk/Contents/Home" \
   .tools/apache-maven-3.9.9/bin/mvn -Dmaven.repo.local=.m2/repository spring-boot:run
 ```
@@ -891,7 +891,7 @@ target/ragas-report.json
 每轮对话会保存 `AgentRunTrace`：
 
 - `intent`：本轮意图。
-- `riskLevel`：后台风险等级。
+- `riskLevel`：后台优先级。
 - `memoryBrief`：MemoryAgent 汇总的记忆。
 - `knowledgeQuery`：KnowledgeAgent 最终 query。
 - `responsePlan`：回复策略。
@@ -902,7 +902,7 @@ target/ragas-report.json
 
 ```text
 query=焦虑 睡眠 稳定情绪; retrieved=4
-query=危机安全计划 自伤 即时危险; refined=true; retrieved=4
+query=危机安全计划 运维 即时危险; refined=true; retrieved=4
 ```
 
 这些字段适合排查：
@@ -911,7 +911,7 @@ query=危机安全计划 自伤 即时危险; refined=true; retrieved=4
 - query 改写是否偏离用户输入。
 - 检索是否为空。
 - 是否发生二次检索。
-- 最终回复由 CompanionAgent 还是 CounselorAgent 生成。
+- 最终回复由 ResearchAssistantAgent 还是 DecisionAgent 生成。
 
 ### 19.2 常见问题
 
@@ -1009,8 +1009,8 @@ bm25 = 0.35
 `KnowledgeAgent` 的 query 改写是召回质量的入口。可观察 `AgentRunTrace.knowledgeQuery`，重点检查：
 
 - 是否保留了用户真正的问题。
-- 是否加入了相关校园资源或风险处理词。
-- 是否过度抽象，比如只剩“心理支持”。
+- 是否加入了相关研究资料或失败诊断词。
+- 是否过度抽象，比如只剩“证据支持”。
 - 是否过度具体，导致召回变窄。
 
 ## 21. 当前实现的边界

@@ -1,8 +1,8 @@
 services:
   app:
     build: .
-    image: mindbridge-agent:0.1.0
-    container_name: mindbridge-agent
+    image: evidencelab-agent:0.1.0
+    container_name: evidencelab-agent
     depends_on:
       - mysql
       - redis
@@ -10,19 +10,21 @@ services:
     environment:
       SERVER_PORT: 8080
       SPRING_PROFILES_ACTIVE: mysql
-      DB_URL: jdbc:mysql://mysql:3306/mindbridge?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
-      DB_USERNAME: mindbridge
-      DB_PASSWORD: mindbridge
+      DB_URL: jdbc:mysql://mysql:3306/evidencelab?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      DB_USERNAME: evidencelab
+      DB_PASSWORD: evidencelab
       REDIS_HOST: redis
       REDIS_PORT: 6379
-      AI_PROVIDER: ${AI_PROVIDER:-ollama}
-      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-mindbridge-qwen2.5-7b-ft:latest}
+      AI_PROVIDER: ${AI_PROVIDER:-openai}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com}
+      OPENAI_MODEL: ${OPENAI_MODEL:-gpt-4o-mini}
       USE_CHROMA: ${USE_CHROMA:-true}
       CHROMA_BASE_URL: http://chroma:8000
       MEMORY_USE_CHROMA: ${MEMORY_USE_CHROMA:-true}
       MEMORY_CHROMA_BASE_URL: http://chroma:8000
-      MEMORY_CHROMA_COLLECTION: ${MEMORY_CHROMA_COLLECTION:-mindbridge_user_memory}
+      MEMORY_CHROMA_COLLECTION: ${MEMORY_CHROMA_COLLECTION:-evidencelab_user_memory}
+      CHROMA_COLLECTION: ${CHROMA_COLLECTION:-evidencelab_knowledge}
       MCP_EMAIL_MODE: ${MCP_EMAIL_MODE:-log}
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
@@ -35,11 +37,11 @@ services:
 
   mysql:
     image: mysql:8.4
-    container_name: mindbridge-mysql
+    container_name: evidencelab-mysql
     environment:
-      MYSQL_DATABASE: mindbridge
-      MYSQL_USER: mindbridge
-      MYSQL_PASSWORD: mindbridge
+      MYSQL_DATABASE: evidencelab
+      MYSQL_USER: evidencelab
+      MYSQL_PASSWORD: evidencelab
       MYSQL_ROOT_PASSWORD: root
     ports:
       - "3306:3306"
@@ -48,7 +50,7 @@ services:
 
   redis:
     image: redis:7.2-alpine
-    container_name: mindbridge-redis
+    container_name: evidencelab-redis
     command: redis-server --appendonly yes
     ports:
       - "6379:6379"
@@ -57,7 +59,7 @@ services:
 
   chroma:
     image: chromadb/chroma:latest
-    container_name: mindbridge-chroma
+    container_name: evidencelab-chroma
     ports:
       - "8000:8000"
     volumes:
@@ -65,7 +67,7 @@ services:
 
   mailpit:
     image: axllent/mailpit:latest
-    container_name: mindbridge-mailpit
+    container_name: evidencelab-mailpit
     ports:
       - "1025:1025"
       - "8025:8025"

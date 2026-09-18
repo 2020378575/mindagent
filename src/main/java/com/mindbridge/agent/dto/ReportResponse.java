@@ -2,13 +2,13 @@ package com.mindbridge.agent.dto;
 
 import com.mindbridge.agent.domain.EmotionLabel;
 import com.mindbridge.agent.domain.IntentType;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.ToolStatus;
 import java.time.Instant;
 
 /**
- * 后台心理报告列表响应。
+ * 运维归档列表响应。
  */
 public record ReportResponse(
         Long id,
@@ -25,7 +25,7 @@ public record ReportResponse(
         ToolStatus emailStatus,
         Instant createdAt
 ) {
-    public static ReportResponse from(PsychologicalReport report) {
+    public static ReportResponse from(OpsArchiveRecord report) {
         return new ReportResponse(
                 report.getId(),
                 report.getUser().getId(),

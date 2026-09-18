@@ -99,10 +99,8 @@ public class KnowledgeService {
             return List.of();
         }
         return chunks.stream()
-                .map(chunk -> new SearchResult(
-                        chunk.getId(),
-                        chunk.getSource(),
-                        chunk.getContent(),
+                .map(chunk -> SearchResult.fromChunk(
+                        chunk,
                         cosine(queryEmbedding, parseEmbedding(chunk.getEmbeddingJson()))))
                 .filter(result -> result.score() > 0.0)
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
@@ -196,7 +194,7 @@ public class KnowledgeService {
                     String expandedContent = String.join("\n\n", neighbors.stream()
                             .map(KnowledgeChunk::getContent)
                             .toList());
-                    return new SearchResult(chunk.getId(), chunk.getSource(), expandedContent, result.score());
+                    return SearchResult.fromChunk(chunk, result.score()).withContent(expandedContent);
                 })
                 .orElse(result);
     }
@@ -268,7 +266,7 @@ public class KnowledgeService {
 
         private SearchResult toSearchResult() {
             double score = vectorScore * VECTOR_WEIGHT + bm25Score * BM25_WEIGHT;
-            return new SearchResult(result.chunkId(), result.source(), result.content(), score);
+            return result.withScore(score);
         }
     }
 }

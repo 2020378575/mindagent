@@ -2,14 +2,14 @@ package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.config.MindBridgeProperties;
 import com.mindbridge.agent.domain.AlertRecord;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import org.springframework.mail.SimpleMailMessage;
 import org.springframework.mail.javamail.JavaMailSender;
 
 /**
  * SMTP 邮件预警实现。
  *
- * <p>高风险报告触发后，把摘要信息发送给配置的辅导员或心理中心邮箱。</p>
+ * <p>高优先级归档触发后，把摘要信息发送给配置的研究运维邮箱。</p>
  */
 public class SmtpAlertNotifier implements AlertNotifier {
 
@@ -22,13 +22,13 @@ public class SmtpAlertNotifier implements AlertNotifier {
     }
 
     @Override
-    public void notify(AlertRecord alertRecord, PsychologicalReport report) {
+    public void notify(AlertRecord alertRecord, OpsArchiveRecord report) {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.getMcp().getEmail().getFrom());
         message.setTo(alertRecord.getRecipient());
-        message.setSubject("【高危心理预警】学生用户 %s 存在高风险信号".formatted(report.getUser().getUsername()));
+        message.setSubject("【高优先级预警】用户 %s 存在高风险信号".formatted(report.getUser().getUsername()));
         message.setText("""
-                系统在对话中监测到 1 名学生出现高风险心理状态，请及时关注并干预。
+                系统监测到 1 条高优先级归档信号，请及时关注。
 
                 【预警信息如下】
                 报告ID：%s
@@ -37,7 +37,7 @@ public class SmtpAlertNotifier implements AlertNotifier {
                 对话内容：%s
                 情绪判定：%s
                 综合情绪得分：%.2f
-                风险等级：%s
+                优先级：%s
                 判断摘要：%s
 
                 """.formatted(

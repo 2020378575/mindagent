@@ -1,7 +1,7 @@
 package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.domain.AlertRecord;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -15,7 +15,7 @@ public class LogAlertNotifier implements AlertNotifier {
     private static final Logger log = LoggerFactory.getLogger(LogAlertNotifier.class);
 
     @Override
-    public void notify(AlertRecord alertRecord, PsychologicalReport report) {
+    public void notify(AlertRecord alertRecord, OpsArchiveRecord report) {
         log.warn(
                 "High risk alert dry-run: recipient={}, reportId={}, user={}, summary={}",
                 alertRecord.getRecipient(),

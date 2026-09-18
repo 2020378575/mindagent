@@ -109,9 +109,9 @@ public class McpToolExecutionService {
         SimpleMailMessage message = new SimpleMailMessage();
         message.setFrom(properties.getMcp().getEmail().getFrom());
         message.setTo(recipient);
-        message.setSubject("【高危心理预警】学生用户 %s 存在高风险信号".formatted(username));
+        message.setSubject("【高优先级预警】用户 %s 存在高风险信号".formatted(username));
         message.setText("""
-                系统在对话中监测到 1 名学生出现高风险心理状态，请及时关注并干预。
+                系统监测到 1 条高优先级归档信号，请及时关注。
 
                 【预警信息如下】
                 报告ID：%s
@@ -120,7 +120,7 @@ public class McpToolExecutionService {
                 对话内容：%s
                 情绪判定：%s
                 综合情绪得分：%.2f
-                风险等级：%s
+                优先级：%s
                 判断摘要：%s
                 发送时间：%s
 
@@ -150,7 +150,7 @@ public class McpToolExecutionService {
     private void writeHeader(Row row) {
         String[] headers = {
                 "报告ID", "用户ID", "账号", "会话ID", "意图", "情绪标签", "情绪总分",
-                "风险等级", "置信度", "判断摘要", "对话内容", "对话时间"
+                "优先级", "置信度", "判断摘要", "对话内容", "对话时间"
         };
         for (int i = 0; i < headers.length; i++) {
             cell(row, i).setCellValue(headers[i]);

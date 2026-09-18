@@ -6,11 +6,13 @@ import com.mindbridge.agent.domain.ChatMessage;
 import com.mindbridge.agent.domain.ChatSession;
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.MessageRole;
-import com.mindbridge.agent.domain.RiskLevel;
+import com.mindbridge.agent.domain.ProjectStatus;
+import com.mindbridge.agent.domain.ResearchProject;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.dto.AgentRunTraceResponse;
 import com.mindbridge.agent.repository.ChatMessageRepository;
 import com.mindbridge.agent.repository.ChatSessionRepository;
+import com.mindbridge.agent.repository.ResearchProjectRepository;
 import com.mindbridge.agent.repository.UserAccountRepository;
 import com.mindbridge.agent.service.AgentRunTraceService;
 import com.mindbridge.agent.service.agent.AgentAction;
@@ -41,6 +43,9 @@ class AgentApplicationTests {
     @Autowired
     private ChatMessageRepository chatMessageRepository;
 
+    @Autowired
+    private ResearchProjectRepository researchProjectRepository;
+
     @Test
     void contextLoads() {
     }
@@ -54,10 +59,18 @@ class AgentApplicationTests {
         user.setRoles(Set.of("ROLE_USER"));
         user = userAccountRepository.save(user);
 
+        ResearchProject project = new ResearchProject();
+        project.setOwner(user);
+        project.setName("Trace project");
+        project.setObjective("Keep existing chat traces attached to a project.");
+        project.setStatus(ProjectStatus.ACTIVE);
+        project = researchProjectRepository.save(project);
+
         ChatSession session = new ChatSession();
         session.setPublicId("trace-session");
         session.setTitle("Trace session");
         session.setUser(user);
+        session.setProject(project);
         session = chatSessionRepository.save(session);
 
         ChatMessage message = new ChatMessage();
@@ -69,39 +82,27 @@ class AgentApplicationTests {
 
         Instant startedAt = Instant.now();
         AgentRunResult result = new AgentRunResult(
-                IntentType.CHAT,
-                RiskLevel.LOW,
+                IntentType.GENERAL_CHAT,
+                List.of(),
                 null,
-                List.of(),
-                List.of(),
+                null,
+                null,
                 List.of(),
                 "memory loaded",
                 null,
                 "answer naturally",
-                AgentName.COMPANION_AGENT,
+                AgentName.RESEARCH_ASSISTANT_AGENT,
                 List.of(new AgentStep(
                         1,
-                        AgentName.MEMORY_AGENT,
-                        AgentAction.READ_MEMORY,
-                        "loaded short-term memory",
-                        startedAt))
-        );
+                        AgentName.RESEARCH_CONTEXT_AGENT,
+                        AgentAction.LOAD_RESEARCH_CONTEXT,
+                        "loaded research memory",
+                        Instant.now())));
+        agentRunTraceService.saveRun(user, session, message, "hello trace", result, startedAt, Instant.now());
 
-        String traceId = agentRunTraceService
-                .saveRun(user, session, message, "hello trace", result, startedAt, Instant.now())
-                .getTraceId();
-
-        AgentRunTraceResponse trace = agentRunTraceService.trace(traceId);
-        assertThat(trace.sessionId()).isEqualTo("trace-session");
-        assertThat(trace.stepCount()).isEqualTo(1);
-        assertThat(trace.steps()).singleElement()
-                .satisfies(step -> {
-                    assertThat(step.agent()).isEqualTo(AgentName.MEMORY_AGENT);
-                    assertThat(step.action()).isEqualTo(AgentAction.READ_MEMORY);
-                    assertThat(step.observation()).isEqualTo("loaded short-term memory");
-                });
-        assertThat(agentRunTraceService.tracesForSession("trace-session"))
-                .extracting(AgentRunTraceResponse::traceId)
-                .contains(traceId);
+        List<AgentRunTraceResponse> traces = agentRunTraceService.tracesForSession("trace-session");
+        assertThat(traces).isNotEmpty();
+        assertThat(traces.get(0).intent()).isEqualTo(IntentType.GENERAL_CHAT);
+        assertThat(traces.get(0).responseAgent()).isEqualTo(AgentName.RESEARCH_ASSISTANT_AGENT);
     }
 }

@@ -2,9 +2,9 @@ package com.mindbridge.agent.service.agent;
 
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.RiskLevel;
-import com.mindbridge.agent.service.PsychologyAssessment;
 import com.mindbridge.agent.service.ai.AiMessage;
 import com.mindbridge.agent.service.knowledge.SearchResult;
+import com.mindbridge.agent.service.memory.ResearchMemoryBundle;
 import java.util.List;
 
 /**
@@ -12,10 +12,10 @@ import java.util.List;
  */
 public record AgentRunResult(
         IntentType intent,
-        RiskLevel riskLevel,
-        PsychologyAssessment assessment,
-        List<SearchResult> retrievedKnowledge,
-        List<AiMessage> modelHistory,
+        List<SearchResult> retrievedEvidence,
+        EvidenceCritique critique,
+        DecisionDraft decisionDraft,
+        ResearchMemoryBundle memoryBundle,
         List<AiMessage> responseMessages,
         String memoryBrief,
         String knowledgeQuery,
@@ -26,10 +26,10 @@ public record AgentRunResult(
     public static AgentRunResult from(AgentContext context) {
         return new AgentRunResult(
                 context.intent(),
-                context.riskLevel(),
-                context.assessment(),
-                context.retrievedKnowledge(),
-                context.modelHistory(),
+                context.retrievedEvidence(),
+                context.critique(),
+                context.decisionDraft(),
+                context.memoryBundle(),
                 context.responseMessages(),
                 context.memoryBrief(),
                 context.knowledgeQuery(),
@@ -39,7 +39,20 @@ public record AgentRunResult(
         );
     }
 
+    /** 兼容旧聊天落库字段：研究环不再做优先级评估。 */
+    public RiskLevel riskLevel() {
+        return RiskLevel.LOW;
+    }
+
+    public List<SearchResult> retrievedKnowledge() {
+        return retrievedEvidence;
+    }
+
+    public List<AiMessage> modelHistory() {
+        return List.of();
+    }
+
     public boolean requiresReport() {
-        return intent != null && intent != IntentType.CHAT && assessment != null;
+        return false;
     }
 }

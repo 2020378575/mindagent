@@ -1,12 +1,11 @@
 package com.mindbridge.agent.domain;
 
 /**
- * 用户输入的业务意图。
- *
- * <p>CHAT 走普通对话，CONSULT/RISK 才进入心理支持、RAG 和报告链路。</p>
+ * 研究工作区意图。决定 Agent 路由路径。
  */
 public enum IntentType {
-    CHAT,
-    CONSULT,
-    RISK
+    GENERAL_CHAT,
+    EVIDENCE_QUERY,
+    RESEARCH_DECISION,
+    RESULT_REVIEW
 }

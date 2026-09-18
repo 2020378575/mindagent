@@ -1,7 +1,7 @@
 package com.mindbridge.agent.service.mcp;
 
 import com.mindbridge.agent.config.MindBridgeProperties;
-import com.mindbridge.agent.domain.PsychologicalReport;
+import com.mindbridge.agent.domain.OpsArchiveRecord;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import org.springframework.web.reactive.function.client.WebClient;
@@ -18,7 +18,7 @@ public class HttpExcelReportWriter implements ExcelReportWriter {
     }
 
     @Override
-    public void write(PsychologicalReport report) {
+    public void write(OpsArchiveRecord report) {
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("reportId", report.getId());
         payload.put("userId", report.getUser().getId());

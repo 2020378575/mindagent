@@ -1,0 +1,202 @@
+[
+  {
+    "id": "el-001",
+    "projectId": 1,
+    "question": "在 12GB GPU 约束下该选 LoRA 还是 QLoRA？",
+    "expectedIntent": "RESEARCH_DECISION",
+    "expectedSources": ["lora-vs-qlora-12gb.md"],
+    "requiredClaims": ["QLoRA", "12GB"],
+    "opposingClaims": ["LoRA"],
+    "forbiddenClaims": ["Excel", "MCP"]
+  },
+  {
+    "id": "el-002",
+    "projectId": 1,
+    "question": "根据资料，12GB 显存时 QLoRA 为什么通常更省内存？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["lora-vs-qlora-12gb.md"],
+    "requiredClaims": ["NF4", "QLoRA"],
+    "opposingClaims": [],
+    "forbiddenClaims": ["诊断"]
+  },
+  {
+    "id": "el-003",
+    "projectId": 1,
+    "question": "run-019 的实验结果是否验证了 LoRA 会 OOM？",
+    "expectedIntent": "RESULT_REVIEW",
+    "expectedSources": ["oom-experiment-log.md"],
+    "requiredClaims": ["out of memory", "13.8"],
+    "opposingClaims": [],
+    "forbiddenClaims": ["Excel"]
+  },
+  {
+    "id": "el-004",
+    "projectId": 1,
+    "question": "对照实验日志里，LoRA r=16 batch=8 的峰值显存是多少？",
+    "expectedIntent": "RESULT_REVIEW",
+    "expectedSources": ["oom-experiment-log.md"],
+    "requiredClaims": ["13.8", "batch=8"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-005",
+    "projectId": 1,
+    "question": "论文 A 在大数据集上对 LoRA 的结论是什么？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["paper-a-large-data.md"],
+    "requiredClaims": ["100k", "LoRA"],
+    "opposingClaims": ["QLoRA"],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-006",
+    "projectId": 1,
+    "question": "论文 B 在小数据集上为什么推荐 QLoRA？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["paper-b-small-data.md"],
+    "requiredClaims": ["10k", "QLoRA"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-007",
+    "projectId": 1,
+    "question": "两篇论文在不同数据规模下对 LoRA 与 QLoRA 的取舍如何决策？",
+    "expectedIntent": "RESEARCH_DECISION",
+    "expectedSources": ["paper-a-large-data.md", "paper-b-small-data.md"],
+    "requiredClaims": ["100k", "10k"],
+    "opposingClaims": ["LoRA", "QLoRA"],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-008",
+    "projectId": 1,
+    "question": "基线 README 使用了什么量化配置与学习率？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["baseline-readme.md"],
+    "requiredClaims": ["NF4", "2e-4"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-009",
+    "projectId": 1,
+    "question": "根据配置说明，成功标准对峰值显存有什么要求？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["baseline-readme.md"],
+    "requiredClaims": ["12GB", "QLoRA"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-010",
+    "projectId": 11,
+    "question": "根据资料，Project Alpha 的项目专属标记是什么？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["project-alpha-notes.md"],
+    "requiredClaims": ["ALPHA-ONLY-SIGNAL"],
+    "opposingClaims": [],
+    "forbiddenClaims": ["BETA-ONLY-SIGNAL"]
+  },
+  {
+    "id": "el-011",
+    "projectId": 22,
+    "question": "根据资料，Project Beta 的项目专属标记是什么？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["project-beta-notes.md"],
+    "requiredClaims": ["BETA-ONLY-SIGNAL"],
+    "opposingClaims": [],
+    "forbiddenClaims": ["ALPHA-ONLY-SIGNAL"]
+  },
+  {
+    "id": "el-012",
+    "projectId": 1,
+    "question": "你好，今天天气怎么样？",
+    "expectedIntent": "GENERAL_CHAT",
+    "expectedSources": [],
+    "requiredClaims": [],
+    "opposingClaims": [],
+    "forbiddenClaims": ["Excel", "MCP"]
+  },
+  {
+    "id": "el-013",
+    "projectId": 1,
+    "question": "在显存紧张时优先选 LoRA 还是 QLoRA 作为默认方案？",
+    "expectedIntent": "RESEARCH_DECISION",
+    "expectedSources": ["lora-vs-qlora-12gb.md", "baseline-readme.md"],
+    "requiredClaims": ["QLoRA", "12GB"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-014",
+    "projectId": 1,
+    "question": "实验日志是否支持之前关于 LoRA 峰值超 12GB 的判断？",
+    "expectedIntent": "RESULT_REVIEW",
+    "expectedSources": ["oom-experiment-log.md"],
+    "requiredClaims": ["exceeded 12GB", "QLoRA"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-015",
+    "projectId": 1,
+    "question": "引用基线配置，batch_size 和 max_seq_len 分别是多少？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["baseline-readme.md"],
+    "requiredClaims": ["batch_size: 4", "1024"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-016",
+    "projectId": 1,
+    "question": "对比论文结论后，小数据场景该选哪种适配器方案？",
+    "expectedIntent": "RESEARCH_DECISION",
+    "expectedSources": ["paper-b-small-data.md"],
+    "requiredClaims": ["QLoRA", "10k"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-017",
+    "projectId": 1,
+    "question": "根据资料，NF4 量化出现在哪些配置说明里？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["lora-vs-qlora-12gb.md", "baseline-readme.md"],
+    "requiredClaims": ["NF4"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-018",
+    "projectId": 1,
+    "question": "复核 run-019 后下一步建议是什么？",
+    "expectedIntent": "RESULT_REVIEW",
+    "expectedSources": ["oom-experiment-log.md"],
+    "requiredClaims": ["QLoRA NF4", "batch=4"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-019",
+    "projectId": 1,
+    "question": "大数据集且显存充足时，论文证据更偏向哪种方法？",
+    "expectedIntent": "EVIDENCE_QUERY",
+    "expectedSources": ["paper-a-large-data.md"],
+    "requiredClaims": ["LoRA", "accuracy"],
+    "opposingClaims": [],
+    "forbiddenClaims": []
+  },
+  {
+    "id": "el-020",
+    "projectId": 1,
+    "question": "随便聊聊，我刚泡了杯咖啡。",
+    "expectedIntent": "GENERAL_CHAT",
+    "expectedSources": [],
+    "requiredClaims": [],
+    "opposingClaims": [],
+    "forbiddenClaims": ["Excel"]
+  }
+]

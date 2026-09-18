@@ -3,10 +3,9 @@ package com.mindbridge.agent.service.knowledge.eval;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.mindbridge.agent.domain.IntentType;
-import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.service.IntentClassifier;
-import com.mindbridge.agent.service.PsychologicalAssessmentService;
 import com.mindbridge.agent.service.ai.AiClient;
 import com.mindbridge.agent.service.ai.AiMessage;
 import com.mindbridge.agent.service.knowledge.KnowledgeService;
@@ -28,7 +27,6 @@ public class RagEvaluationService {
     private final KnowledgeService knowledgeService;
     private final AiClient aiClient;
     private final IntentClassifier intentClassifier;
-    private final PsychologicalAssessmentService assessmentService;
     private final ObjectMapper objectMapper;
     private final DefaultResourceLoader resourceLoader = new DefaultResourceLoader();
 
@@ -36,24 +34,39 @@ public class RagEvaluationService {
             KnowledgeService knowledgeService,
             AiClient aiClient,
             IntentClassifier intentClassifier,
-            PsychologicalAssessmentService assessmentService,
             ObjectMapper objectMapper
     ) {
         this.knowledgeService = knowledgeService;
         this.aiClient = aiClient;
         this.intentClassifier = intentClassifier;
-        this.assessmentService = assessmentService;
-        this.objectMapper = objectMapper.copy().enable(SerializationFeature.INDENT_OUTPUT);
+        this.objectMapper = objectMapper.copy()
+                .registerModule(new JavaTimeModule())
+                .disable(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
+                .enable(SerializationFeature.INDENT_OUTPUT);
     }
 
     public RagEvalReport evaluate(String datasetLocation, int topK) {
-        List<RagEvalCase> cases = loadDataset(datasetLocation);
+        return evaluate(datasetLocation, topK, "unknown", 0L, 0);
+    }
+
+    public RagEvalReport evaluate(
+            String datasetLocation,
+            int topK,
+            String gitCommit,
+            long crossProjectLeakageCount,
+            int taskRecoveryScenariosPassed
+    ) {
+        List<ResearchRagEvalCase> cases = loadDataset(datasetLocation);
         List<RagEndToEndCaseResult> results = cases.stream()
-                .map(testCase -> buildRagasCase(testCase, topK))
+                .map(testCase -> buildCase(testCase, topK))
                 .toList();
-        long passedCases = results.stream()
-                .filter(RagEndToEndCaseResult::passed)
-                .count();
+        long passedCases = results.stream().filter(RagEndToEndCaseResult::passed).count();
+        EvidenceLabMetrics metrics = buildMetrics(
+                datasetLocation,
+                gitCommit,
+                results,
+                crossProjectLeakageCount,
+                taskRecoveryScenariosPassed);
         return new RagEvalReport(
                 Instant.now(),
                 datasetLocation,
@@ -61,6 +74,7 @@ public class RagEvaluationService {
                 results.size(),
                 passedCases,
                 results.size() - passedCases,
+                metrics,
                 results);
     }
 
@@ -75,61 +89,105 @@ public class RagEvaluationService {
             }
             objectMapper.writeValue(path.toFile(), report);
         } catch (Exception exception) {
-            throw new IllegalStateException("Failed to write RAGAS input report: " + outputPath, exception);
+            throw new IllegalStateException("Failed to write EvidenceLab eval report: " + outputPath, exception);
+        }
+    }
+
+    public void writeMetrics(EvidenceLabMetrics metrics, String outputPath) {
+        if (outputPath == null || outputPath.isBlank()) {
+            return;
+        }
+        try {
+            Path path = Path.of(outputPath);
+            if (path.getParent() != null) {
+                Files.createDirectories(path.getParent());
+            }
+            objectMapper.writeValue(path.toFile(), metrics);
+        } catch (Exception exception) {
+            throw new IllegalStateException("Failed to write EvidenceLab metrics: " + outputPath, exception);
         }
     }
 
     public String formatSummary(RagEvalReport report) {
-        long casesWithContexts = report.cases().stream()
-                .filter(testCase -> !testCase.retrievedContexts().isEmpty())
-                .count();
+        EvidenceLabMetrics metrics = report.metrics();
         return """
-                RAGAS input report completed.
+                EvidenceLab evaluation completed.
                 dataset=%s
                 cases=%d
                 passed=%d
                 failed=%d
                 topK=%d
-                casesWithRetrievedContexts=%d
-                output contains Java harness assertions; run eval/run-ragas-eval.py for optional RAGAS scores.
+                intentAccuracy=%.4f
+                recallAtFive=%.4f
+                claimSourceSupportRate=%.4f
+                structuredOutputSuccessRate=%.4f
+                crossProjectLeakageCount=%d
+                taskRecoveryScenariosPassed=%d
                 """.formatted(
                 report.dataset(),
                 report.totalCases(),
                 report.passedCases(),
                 report.failedCases(),
                 report.topK(),
-                casesWithContexts);
+                metrics.intentAccuracy(),
+                metrics.recallAtFive(),
+                metrics.claimSourceSupportRate(),
+                metrics.structuredOutputSuccessRate(),
+                metrics.crossProjectLeakageCount(),
+                metrics.taskRecoveryScenariosPassed());
     }
 
-    private RagEndToEndCaseResult buildRagasCase(RagEvalCase testCase, int topK) {
-        List<SearchResult> retrieved = knowledgeService.retrieve(testCase.question(), topK);
-        List<String> retrievedContexts = retrieved.stream()
-                .map(SearchResult::content)
-                .toList();
-        List<String> retrievedSources = retrieved.stream()
-                .map(SearchResult::source)
-                .distinct()
-                .toList();
+    private EvidenceLabMetrics buildMetrics(
+            String datasetLocation,
+            String gitCommit,
+            List<RagEndToEndCaseResult> results,
+            long crossProjectLeakageCount,
+            int taskRecoveryScenariosPassed
+    ) {
+        int total = results.size();
+        long intentHits = results.stream()
+                .filter(result -> normalize(result.expectedIntent()).equals(normalize(result.actualIntent())))
+                .count();
+        long recallHits = results.stream()
+                .filter(result -> result.failures().stream().noneMatch(failure -> failure.startsWith("missing expected source:")))
+                .count();
+        long claimHits = results.stream()
+                .filter(result -> result.failures().stream().noneMatch(failure ->
+                        failure.startsWith("missing required claim:")
+                                || failure.startsWith("opposing claim missing grounding:")
+                                || failure.startsWith("forbidden claim present:")))
+                .count();
+        long structuredHits = results.stream()
+                .filter(result -> result.failures().stream().noneMatch(failure -> failure.startsWith("structured:")))
+                .count();
+        long passed = results.stream().filter(RagEndToEndCaseResult::passed).count();
+        return new EvidenceLabMetrics(
+                datasetVersion(datasetLocation),
+                gitCommit == null || gitCommit.isBlank() ? "unknown" : gitCommit,
+                ratio(intentHits, total),
+                ratio(recallHits, total),
+                ratio(claimHits, total),
+                ratio(structuredHits, total),
+                crossProjectLeakageCount,
+                taskRecoveryScenariosPassed,
+                total,
+                passed);
+    }
+
+    private RagEndToEndCaseResult buildCase(ResearchRagEvalCase testCase, int topK) {
+        List<SearchResult> retrieved = knowledgeService.retrieve(testCase.question(), Math.max(topK, 5));
+        List<String> retrievedContexts = retrieved.stream().map(SearchResult::content).toList();
+        List<String> retrievedSources = retrieved.stream().map(SearchResult::source).distinct().toList();
         String actualIntent = actualIntent(testCase.question());
-        String actualRiskLevel = actualRiskLevel(testCase.question(), actualIntent);
         String answer = generateAnswer(testCase.question(), retrievedContexts);
-        List<String> failures = evaluateAssertions(
-                testCase,
-                actualIntent,
-                actualRiskLevel,
-                retrievedSources,
-                retrievedContexts,
-                answer);
+        List<String> failures = evaluateAssertions(testCase, actualIntent, retrievedSources, retrievedContexts, answer);
         return new RagEndToEndCaseResult(
                 testCase.id(),
                 testCase.question(),
-                normalizeLabel(testCase.expectedIntent()),
+                testCase.expectedIntent() == null ? "" : testCase.expectedIntent().name(),
                 actualIntent,
-                normalizeLabel(testCase.expectedRiskLevel()),
-                actualRiskLevel,
                 retrievedSources,
                 retrievedContexts,
-                safeString(testCase.referenceAnswer()),
                 answer,
                 failures.isEmpty(),
                 failures);
@@ -137,27 +195,26 @@ public class RagEvaluationService {
 
     private String generateAnswer(String question, List<String> retrievedContexts) {
         String context = retrievedContexts.isEmpty()
-                ? "无可用检索上下文。"
+                ? "No retrieved context."
                 : String.join("\n\n---\n\n", retrievedContexts);
         return aiClient.complete(List.of(
                 AiMessage.system("""
-                        你是 MindBridge 的 RAG 回答生成器，用于 RAGAS 评测样本生成。
-                        请依据检索上下文回答学生问题，语气温和、具体、克制。
-                        如果上下文不足，只给出安全的一般支持建议，不要编造校园流程。
-                        禁止诊断疾病、开药、透露后台风险等级、Excel、MCP 或报告流程。
-                        用中文回答，不超过 180 字。
+                        You are EvidenceLab's research answer generator for evaluation samples.
+                        Answer from retrieved evidence only. Prefer concrete claims about methods,
+                        VRAM, dataset size, and experiment outcomes. Keep answers under 180 words.
+                        Do not invent citations, Excel workflows, or MCP internals.
                         """),
                 AiMessage.user("""
-                        学生问题：
+                        Question:
                         %s
 
-                        检索上下文：
+                        Retrieved context:
                         %s
                         """.formatted(question, context))
         )).trim();
     }
 
-    private List<RagEvalCase> loadDataset(String datasetLocation) {
+    private List<ResearchRagEvalCase> loadDataset(String datasetLocation) {
         try {
             Resource resource = resourceLoader.getResource(datasetLocation);
             try (InputStream inputStream = resource.getInputStream()) {
@@ -165,105 +222,65 @@ public class RagEvaluationService {
                 });
             }
         } catch (Exception exception) {
-            throw new IllegalArgumentException("Failed to load RAG evaluation dataset: " + datasetLocation, exception);
+            throw new IllegalArgumentException("Failed to load EvidenceLab evaluation dataset: " + datasetLocation, exception);
         }
-    }
-
-    private String normalizeLabel(String value) {
-        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
-    }
-
-    private String safeString(String value) {
-        return value == null ? "" : value;
     }
 
     private String actualIntent(String question) {
         try {
-            return intentClassifier.classify(question).name();
-        } catch (Exception ignored) {
-            return "";
-        }
-    }
-
-    private String actualRiskLevel(String question, String actualIntent) {
-        if (IntentType.CHAT.name().equals(actualIntent)) {
-            return RiskLevel.LOW.name();
-        }
-        try {
-            return assessmentService.assess(question).risk().name();
+            IntentType intent = intentClassifier.classify(question).intent();
+            return intent == null ? "" : intent.name();
         } catch (Exception ignored) {
             return "";
         }
     }
 
     private List<String> evaluateAssertions(
-            RagEvalCase testCase,
+            ResearchRagEvalCase testCase,
             String actualIntent,
-            String actualRiskLevel,
             List<String> retrievedSources,
             List<String> retrievedContexts,
             String answer
     ) {
         List<String> failures = new ArrayList<>();
-        expectEqual(failures, "intent", normalizeLabel(testCase.expectedIntent()), actualIntent);
-        expectEqual(failures, "riskLevel", normalizeLabel(testCase.expectedRiskLevel()), actualRiskLevel);
+        String expectedIntent = testCase.expectedIntent() == null ? "" : testCase.expectedIntent().name();
+        if (!expectedIntent.isBlank() && !normalize(expectedIntent).equals(normalize(actualIntent))) {
+            failures.add("intent expected=%s actual=%s".formatted(expectedIntent, actualIntent));
+        }
         requireSources(failures, testCase.expectedSources(), retrievedSources);
-        requireTerms(failures, "retrievedContext", testCase.expectedTerms(), joined(retrievedContexts));
-        requireTerms(failures, "requiredAnswer", testCase.requiredAnswerTerms(), answer);
-        requireTerms(failures, "requiredHelp", testCase.requiredHelpTerms(), answer);
-        requireGroundedTerms(
-                failures,
-                testCase.groundedAnswerTerms(),
-                testCase.minGroundedAnswerTerms(),
-                answer + "\n" + joined(retrievedContexts));
-        forbidAnswerTerms(failures, testCase.forbiddenAnswerTerms(), answer);
+        String joined = joined(retrievedContexts) + "\n" + safe(answer);
+        requireClaims(failures, "missing required claim:", testCase.requiredClaims(), joined);
+        requireClaims(failures, "opposing claim missing grounding:", testCase.opposingClaims(), joined);
+        forbidClaims(failures, testCase.forbiddenClaims(), answer);
+        if (answer == null || answer.isBlank()) {
+            failures.add("structured: empty answer");
+        } else if (answer.length() < 8) {
+            failures.add("structured: answer too short");
+        }
         return failures;
-    }
-
-    private void expectEqual(List<String> failures, String field, String expected, String actual) {
-        if (expected.isBlank()) {
-            return;
-        }
-        if (!expected.equals(normalizeLabel(actual))) {
-            failures.add("%s expected=%s actual=%s".formatted(field, expected, safeString(actual)));
-        }
     }
 
     private void requireSources(List<String> failures, List<String> expectedSources, List<String> actualSources) {
         for (String expected : safeList(expectedSources)) {
-            boolean matched = actualSources.stream()
-                    .anyMatch(source -> containsNormalized(source, expected));
+            boolean matched = actualSources.stream().anyMatch(source -> containsNormalized(source, expected));
             if (!matched) {
                 failures.add("missing expected source: " + expected);
             }
         }
     }
 
-    private void requireTerms(List<String> failures, String scope, List<String> terms, String value) {
-        for (String term : safeList(terms)) {
-            if (!containsNormalized(value, term)) {
-                failures.add("missing %s term: %s".formatted(scope, term));
+    private void requireClaims(List<String> failures, String prefix, List<String> claims, String value) {
+        for (String claim : safeList(claims)) {
+            if (!containsNormalized(value, claim)) {
+                failures.add(prefix + " " + claim);
             }
         }
     }
 
-    private void requireGroundedTerms(List<String> failures, List<String> terms, int minimum, String value) {
-        List<String> safeTerms = safeList(terms);
-        if (safeTerms.isEmpty() || minimum <= 0) {
-            return;
-        }
-        long matched = safeTerms.stream()
-                .filter(term -> containsNormalized(value, term))
-                .count();
-        if (matched < minimum) {
-            failures.add("grounded terms matched=%d required=%d".formatted(matched, minimum));
-        }
-    }
-
-    private void forbidAnswerTerms(List<String> failures, List<String> forbiddenTerms, String answer) {
-        for (String term : safeList(forbiddenTerms)) {
-            if (containsNormalized(answer, term)) {
-                failures.add("forbidden answer term present: " + term);
+    private void forbidClaims(List<String> failures, List<String> forbiddenClaims, String answer) {
+        for (String claim : safeList(forbiddenClaims)) {
+            if (containsNormalized(answer, claim)) {
+                failures.add("forbidden claim present: " + claim);
             }
         }
     }
@@ -276,11 +293,33 @@ public class RagEvaluationService {
         return String.join("\n", values == null ? List.of() : values);
     }
 
+    private String safe(String value) {
+        return value == null ? "" : value;
+    }
+
     private boolean containsNormalized(String value, String expected) {
         if (value == null || expected == null || expected.isBlank()) {
             return false;
         }
-        return value.toLowerCase(Locale.ROOT)
-                .contains(expected.toLowerCase(Locale.ROOT));
+        return value.toLowerCase(Locale.ROOT).contains(expected.toLowerCase(Locale.ROOT));
+    }
+
+    private String normalize(String value) {
+        return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
+    }
+
+    private double ratio(long hits, int total) {
+        if (total <= 0) {
+            return 0.0;
+        }
+        return (double) hits / (double) total;
+    }
+
+    private String datasetVersion(String datasetLocation) {
+        if (datasetLocation == null) {
+            return "unknown";
+        }
+        int slash = Math.max(datasetLocation.lastIndexOf('/'), datasetLocation.lastIndexOf('\\'));
+        return slash >= 0 ? datasetLocation.substring(slash + 1) : datasetLocation;
     }
 }

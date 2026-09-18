@@ -1,47 +1,62 @@
 package com.mindbridge.agent.service.agent;
 
-import com.mindbridge.agent.domain.ChatSession;
-import com.mindbridge.agent.domain.UserAccount;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mindbridge.agent.domain.IntentType;
+import com.mindbridge.agent.domain.ResearchTaskCheckpoint;
+import com.mindbridge.agent.service.task.ResearchTaskService;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.stereotype.Service;
 
 /**
- * MindBridge Agent Loop 运行时。
- *
- * <p>每轮学生输入都会进入有限步循环：读取记忆、主控路由、知识检索、风险守护和回复规划。
- * 这里不是无限自主循环，而是受步数限制的安全 agent loop，适合心理安全场景。</p>
+ * 研究决策环运行时：有限步调度，并为每个完成的 Agent 写检查点。
  */
 @Service
 public class AgentRuntimeService {
 
     private static final int MAX_STEPS = 8;
 
-    private final List<MindBridgeAgent> agents;
+    private final List<ResearchAgent> agents;
+    private final ResearchTaskService researchTaskService;
+    private final ObjectMapper objectMapper;
 
     public AgentRuntimeService(
-            MemoryAgent memoryAgent,
+            ResearchContextAgent researchContextAgent,
             SupervisorAgent supervisorAgent,
-            KnowledgeAgent knowledgeAgent,
-            RiskGuardianAgent riskGuardianAgent,
-            CompanionAgent companionAgent,
-            CounselorAgent counselorAgent
+            EvidenceAgent evidenceAgent,
+            EvidenceCriticAgent evidenceCriticAgent,
+            ResearchAssistantAgent researchAssistantAgent,
+            DecisionAgent decisionAgent,
+            ResearchTaskService researchTaskService,
+            ObjectMapper objectMapper
     ) {
-        // 顺序就是 Supervisor 架构下的协作优先级；每个 Agent 通过 supports 判断是否该接手。
         this.agents = List.of(
-                memoryAgent,
+                researchContextAgent,
                 supervisorAgent,
-                knowledgeAgent,
-                riskGuardianAgent,
-                companionAgent,
-                counselorAgent);
+                evidenceAgent,
+                evidenceCriticAgent,
+                researchAssistantAgent,
+                decisionAgent);
+        this.researchTaskService = researchTaskService;
+        this.objectMapper = objectMapper;
     }
 
-    public AgentRunResult run(UserAccount user, ChatSession session, String originalInput, String modelInput) {
-        AgentContext context = new AgentContext(user, session, originalInput, modelInput);
-        for (int step = 1; step <= MAX_STEPS && !context.finished(); step++) {
-            MindBridgeAgent agent = nextAgent(context);
+    public AgentRunResult run(AgentContext context) {
+        for (int step = context.resumeFromStep(); step <= MAX_STEPS && !context.finished(); step++) {
+            if (context.taskId() != null) {
+                researchTaskService.ensureActive(context.taskId());
+            }
+            ResearchAgent agent = nextAgent(context);
             AgentDecision decision = agent.act(context);
             context.addStep(AgentStep.of(step, agent.name(), decision));
+            if (context.taskId() != null) {
+                researchTaskService.saveCheckpoint(
+                        context.taskId(),
+                        step,
+                        agent.name().name(),
+                        context.currentStage(),
+                        context.checkpointPayload());
+            }
             if (decision.complete()) {
                 context.finish();
             }
@@ -49,10 +64,41 @@ public class AgentRuntimeService {
         return AgentRunResult.from(context);
     }
 
-    private MindBridgeAgent nextAgent(AgentContext context) {
+    public AgentContext prepareContext(
+            Long taskId,
+            Long userId,
+            Long projectId,
+            String question,
+            IntentType expectedIntent,
+            Optional<ResearchTaskCheckpoint> latestCheckpoint
+    ) {
+        AgentContext context = new AgentContext(taskId, userId, projectId, question, question);
+        if (expectedIntent != null) {
+            context.setExpectedIntent(expectedIntent);
+        }
+        latestCheckpoint.ifPresent(checkpoint -> {
+            AgentContextCheckpoint payload = readPayload(checkpoint.getResultJson());
+            context.restoreFromCheckpoint(payload);
+            context.setResumeFromStep(checkpoint.getStepNumber() + 1);
+        });
+        return context;
+    }
+
+    private ResearchAgent nextAgent(AgentContext context) {
         return agents.stream()
                 .filter(agent -> agent.supports(context))
                 .findFirst()
                 .orElseThrow(() -> new IllegalStateException("No agent can handle current context."));
+    }
+
+    private AgentContextCheckpoint readPayload(String json) {
+        if (json == null || json.isBlank()) {
+            return null;
+        }
+        try {
+            return objectMapper.readValue(json, AgentContextCheckpoint.class);
+        } catch (Exception exception) {
+            return null;
+        }
     }
 }

@@ -1,12 +1,14 @@
 package com.mindbridge.agent.service.agent;
 
 /**
- * Agent loop 中每一步可执行的动作。
+ * 研究决策环中的单步动作。
  */
 public enum AgentAction {
-    READ_MEMORY,
+    LOAD_RESEARCH_CONTEXT,
     ROUTE_INTENT,
-    RETRIEVE_KNOWLEDGE,
-    ASSESS_RISK,
-    PLAN_RESPONSE
+    RETRIEVE_EVIDENCE,
+    CRITIQUE_EVIDENCE,
+    ANSWER_QUERY,
+    DRAFT_DECISION,
+    REVIEW_RESULT
 }

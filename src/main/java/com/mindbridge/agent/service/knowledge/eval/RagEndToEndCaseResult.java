@@ -7,11 +7,8 @@ public record RagEndToEndCaseResult(
         String question,
         String expectedIntent,
         String actualIntent,
-        String expectedRiskLevel,
-        String actualRiskLevel,
         List<String> retrievedSources,
         List<String> retrievedContexts,
-        String referenceAnswer,
         String answer,
         boolean passed,
         List<String> failures

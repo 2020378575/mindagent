@@ -20,6 +20,8 @@ public class MindBridgeProperties {
     private final Knowledge knowledge = new Knowledge();
     private final RagEval ragEval = new RagEval();
     private final Mcp mcp = new Mcp();
+    private final Research research = new Research();
+    private final Task task = new Task();
 
     public Ai getAi() {
         return ai;
@@ -49,9 +51,17 @@ public class MindBridgeProperties {
         return mcp;
     }
 
+    public Research getResearch() {
+        return research;
+    }
+
+    public Task getTask() {
+        return task;
+    }
+
     public static class Ai {
-        /** 模型提供方：ollama 或 openai。 */
-        private String provider = "ollama";
+        /** 模型提供方：openai（默认，OpenAI 兼容 HTTP API）或 ollama。 */
+        private String provider = "openai";
         /** 生成温度，值越高回答越发散。 */
         private double temperature = 0.35;
         /** 学生端单次回复的最大生成 token 数，避免本地模型无边界扩写。 */
@@ -93,10 +103,10 @@ public class MindBridgeProperties {
     }
 
     public static class Ollama {
-        /** 本地模型服务地址。 */
+        /** 可选的本地 Ollama 服务地址。默认走 OpenAI 兼容 API，不再依赖微调模型。 */
         private String baseUrl = "http://localhost:11434";
-        /** MindBridge 项目模型名称。 */
-        private String model = "mindbridge-qwen2.5-7b-ft:latest";
+        /** 仅在 AI_PROVIDER=ollama 时使用的本地模型名。 */
+        private String model = "qwen2.5:7b";
 
         public String getBaseUrl() {
             return baseUrl;
@@ -175,7 +185,7 @@ public class MindBridgeProperties {
         /** 是否启用 Chroma 作为用户画像长期记忆的语义索引。 */
         private boolean useChroma;
         private String chromaBaseUrl = "http://localhost:8000";
-        private String chromaCollection = "mindbridge_user_memory";
+        private String chromaCollection = "evidencelab_user_memory";
         /** 每轮按当前输入召回的画像记忆数量。 */
         private int topK = 6;
 
@@ -257,7 +267,7 @@ public class MindBridgeProperties {
         /** 是否启用外部 Chroma 向量库。 */
         private boolean useChroma;
         private String chromaBaseUrl = "http://localhost:8000";
-        private String chromaCollection = "mindbridge_knowledge";
+        private String chromaCollection = "evidencelab_knowledge";
         private int chunkSize = 512;
         private int chunkOverlap = 64;
 
@@ -338,7 +348,7 @@ public class MindBridgeProperties {
         /** 是否在启动后生成 RAGAS 输入报告。 */
         private boolean enabled;
         /** 评测集 JSON 路径，支持 classpath: 或文件系统路径。 */
-        private String dataset = "classpath:rag-eval/mindbridge-rag-eval.json";
+        private String dataset = "classpath:rag-eval/evidencelab-rag-eval-v1.json";
         /** 评测链路使用的 TopK 元数据。 */
         private int topK = 4;
         /** 是否在报告生成后退出应用，便于命令行/CI 单独跑评测。 */
@@ -404,7 +414,7 @@ public class MindBridgeProperties {
         /** Excel 写入模式：local、http 或 mcp。 */
         private String mode = "local";
         private String url = "http://localhost:8081";
-        private String localPath = "./data/mindbridge-reports.xlsx";
+        private String localPath = "./data/evidencelab-reports.xlsx";
 
         public String getMode() {
             return mode;
@@ -435,7 +445,7 @@ public class MindBridgeProperties {
         /** 邮件预警模式：log、smtp、http 或 mcp。 */
         private String mode = "log";
         private String url = "http://localhost:8082";
-        private String from = "mindbridge@example.com";
+        private String from = "evidencelab-alerts@example.com";
         private List<String> recipients = new ArrayList<>(List.of("counselor@example.com"));
         private int maxRetries = 2;
         /** MCP Server 收到 send_risk_alert 工具调用后实际投递方式：log 或 smtp。 */
@@ -487,6 +497,62 @@ public class MindBridgeProperties {
 
         public void setMcpServerDeliveryMode(String mcpServerDeliveryMode) {
             this.mcpServerDeliveryMode = mcpServerDeliveryMode;
+        }
+    }
+
+    public static class Research {
+        /** 研究资料原始文件目录。使用不透明 storageKey，重启后仍可恢复解析。 */
+        private String sourceStorageDir = "./data/research-sources";
+
+        public String getSourceStorageDir() {
+            return sourceStorageDir;
+        }
+
+        public void setSourceStorageDir(String sourceStorageDir) {
+            this.sourceStorageDir = sourceStorageDir;
+        }
+    }
+
+    public static class Task {
+        /** 异步任务工作线程数。 */
+        private int workerCount = 2;
+        /** 单阶段超时，供后续阶段看门狗使用。 */
+        private java.time.Duration stageTimeout = java.time.Duration.ofSeconds(60);
+        /** RUNNING 超过该时间视为僵死，启动时重置为 PENDING。 */
+        private java.time.Duration staleRunningAfter = java.time.Duration.ofMinutes(5);
+        /** 含首次执行在内的最大尝试次数；瞬时失败可自动重试。 */
+        private int maxAttempts = 2;
+
+        public int getWorkerCount() {
+            return workerCount;
+        }
+
+        public void setWorkerCount(int workerCount) {
+            this.workerCount = workerCount;
+        }
+
+        public java.time.Duration getStageTimeout() {
+            return stageTimeout;
+        }
+
+        public void setStageTimeout(java.time.Duration stageTimeout) {
+            this.stageTimeout = stageTimeout;
+        }
+
+        public java.time.Duration getStaleRunningAfter() {
+            return staleRunningAfter;
+        }
+
+        public void setStaleRunningAfter(java.time.Duration staleRunningAfter) {
+            this.staleRunningAfter = staleRunningAfter;
+        }
+
+        public int getMaxAttempts() {
+            return maxAttempts;
+        }
+
+        public void setMaxAttempts(int maxAttempts) {
+            this.maxAttempts = maxAttempts;
         }
     }
 }

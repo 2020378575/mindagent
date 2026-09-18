@@ -78,7 +78,7 @@ public class McpToolConfig {
     public AlertNotifier alertNotifier(
             MindBridgeProperties properties,
             WebClient.Builder webClientBuilder,
-            JavaMailSender mailSender,
+            ObjectProvider<JavaMailSender> mailSender,
             McpToolClient mcpToolClient
     ) {
         String mode = properties.getMcp().getEmail().getMode();
@@ -89,7 +89,11 @@ public class McpToolConfig {
             return new HttpAlertNotifier(webClientBuilder, properties);
         }
         if ("smtp".equalsIgnoreCase(mode)) {
-            return new SmtpAlertNotifier(mailSender, properties);
+            JavaMailSender sender = mailSender.getIfAvailable();
+            if (sender == null) {
+                throw new IllegalStateException("MCP_EMAIL_MODE=smtp requires JavaMailSender. Set spring.mail.host.");
+            }
+            return new SmtpAlertNotifier(sender, properties);
         }
         return new LogAlertNotifier();
     }

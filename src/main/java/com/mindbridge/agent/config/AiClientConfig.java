@@ -14,8 +14,8 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Spring AI 大模型客户端装配配置。
  *
- * <p>根据 application.yml 或环境变量选择本地项目模型或 OpenAI 客户端，
- * 让业务服务只依赖统一的 {@link AiClient} 接口。</p>
+ * <p>默认直连 OpenAI 兼容 HTTP API；业务服务只依赖统一的 {@link AiClient} 接口，
+ * 不再依赖本地微调模型。</p>
  */
 @Configuration
 public class AiClientConfig {
@@ -23,10 +23,6 @@ public class AiClientConfig {
     @Bean
     public AiClient aiClient(MindBridgeProperties properties) {
         String provider = properties.getAi().getProvider().toLowerCase();
-        if ("ollama".equals(provider)) {
-            OllamaChatModel model = ollamaChatModel(properties);
-            return new SpringAiChatClient(model, model);
-        }
         if ("openai".equals(provider)) {
             if (properties.getAi().getOpenai().getApiKey().isBlank()) {
                 throw new IllegalStateException("AI_PROVIDER=openai requires OPENAI_API_KEY.");
@@ -34,8 +30,12 @@ public class AiClientConfig {
             OpenAiChatModel model = openAiChatModel(properties);
             return new SpringAiChatClient(model, model);
         }
+        if ("ollama".equals(provider)) {
+            OllamaChatModel model = ollamaChatModel(properties);
+            return new SpringAiChatClient(model, model);
+        }
         throw new IllegalArgumentException(
-                "Unsupported AI_PROVIDER=" + provider + ". Supported providers: ollama, openai.");
+                "Unsupported AI_PROVIDER=" + provider + ". Supported providers: openai, ollama.");
     }
 
     private OllamaChatModel ollamaChatModel(MindBridgeProperties properties) {

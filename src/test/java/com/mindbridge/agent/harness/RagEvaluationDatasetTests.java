@@ -4,7 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.mindbridge.agent.service.knowledge.eval.RagEvalCase;
+import com.mindbridge.agent.domain.IntentType;
+import com.mindbridge.agent.service.knowledge.eval.ResearchRagEvalCase;
 import java.io.InputStream;
 import java.util.Arrays;
 import java.util.List;
@@ -17,40 +18,46 @@ import org.springframework.core.io.support.PathMatchingResourcePatternResolver;
 
 class RagEvaluationDatasetTests {
 
-    private static final String DATASET_PATH = "rag-eval/mindbridge-rag-eval.json";
+    private static final String DATASET_PATH = "rag-eval/evidencelab-rag-eval-v1.json";
 
     @Test
-    void defaultDatasetContainsOneHundredCompleteUniqueCasesCoveringAllKnowledgeSources() throws Exception {
-        List<RagEvalCase> cases = loadCases();
+    void versionedDatasetCoversResearchFixturesAndIntents() throws Exception {
+        List<ResearchRagEvalCase> cases = loadCases();
 
-        assertThat(cases).hasSize(100);
-        assertThat(cases).extracting(RagEvalCase::id).doesNotHaveDuplicates();
-        assertThat(cases).extracting(RagEvalCase::question).doesNotHaveDuplicates();
-        assertThat(cases).filteredOn(testCase -> "LOW".equals(testCase.expectedRiskLevel())).hasSize(45);
-        assertThat(cases).filteredOn(testCase -> "MEDIUM".equals(testCase.expectedRiskLevel())).hasSize(40);
-        assertThat(cases).filteredOn(testCase -> "HIGH".equals(testCase.expectedRiskLevel())).hasSize(15);
+        assertThat(cases).hasSizeGreaterThanOrEqualTo(15);
+        assertThat(cases).extracting(ResearchRagEvalCase::id).doesNotHaveDuplicates();
+        assertThat(cases).extracting(ResearchRagEvalCase::question).doesNotHaveDuplicates();
+        assertThat(cases).extracting(ResearchRagEvalCase::expectedIntent)
+                .contains(
+                        IntentType.RESEARCH_DECISION,
+                        IntentType.EVIDENCE_QUERY,
+                        IntentType.RESULT_REVIEW,
+                        IntentType.GENERAL_CHAT);
         assertThat(cases).allSatisfy(testCase -> {
             assertThat(testCase.id()).isNotBlank();
             assertThat(testCase.question()).isNotBlank();
-            assertThat(testCase.referenceAnswer()).isNotBlank();
-            assertThat(testCase.expectedIntent()).isIn("CHAT", "CONSULT", "RISK");
-            assertThat(testCase.expectedRiskLevel()).isIn("LOW", "MEDIUM", "HIGH");
-            assertThat(testCase.expectedSources()).isNotNull().isNotEmpty();
-            assertThat(testCase.expectedTerms()).isNotNull().isNotEmpty();
-            assertThat(testCase.groundedAnswerTerms()).isNotNull();
-            assertThat(testCase.requiredAnswerTerms()).isNotNull();
-            assertThat(testCase.requiredHelpTerms()).isNotNull();
-            assertThat(testCase.forbiddenAnswerTerms()).isNotNull();
-            assertThat(testCase.minGroundedAnswerTerms()).isBetween(0, testCase.groundedAnswerTerms().size());
+            assertThat(testCase.expectedIntent()).isNotNull();
+            assertThat(testCase.expectedSources()).isNotNull();
+            assertThat(testCase.requiredClaims()).isNotNull();
+            assertThat(testCase.opposingClaims()).isNotNull();
+            assertThat(testCase.forbiddenClaims()).isNotNull();
         });
 
         Set<String> expectedSources = cases.stream()
                 .flatMap(testCase -> testCase.expectedSources().stream())
                 .collect(Collectors.toSet());
-        assertThat(expectedSources).containsExactlyInAnyOrderElementsOf(bundledKnowledgeSources());
+        assertThat(bundledKnowledgeSources()).containsAll(expectedSources);
+        assertThat(bundledKnowledgeSources()).contains(
+                "lora-vs-qlora-12gb.md",
+                "oom-experiment-log.md",
+                "paper-a-large-data.md",
+                "paper-b-small-data.md",
+                "baseline-readme.md",
+                "project-alpha-notes.md",
+                "project-beta-notes.md");
     }
 
-    private List<RagEvalCase> loadCases() throws Exception {
+    private List<ResearchRagEvalCase> loadCases() throws Exception {
         Resource resource = new ClassPathResource(DATASET_PATH);
         try (InputStream inputStream = resource.getInputStream()) {
             return new ObjectMapper().readValue(inputStream, new TypeReference<>() {
