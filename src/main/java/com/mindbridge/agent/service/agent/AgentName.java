@@ -1,15 +1,13 @@
 package com.mindbridge.agent.service.agent;
 
 /**
- * MindBridge 内部专业智能体名称。
- *
- * <p>多智能体协作采用 Supervisor 统筹、专家 Agent 分工的方式，避免把所有职责继续堆在一个服务里。</p>
+ * 研究决策环中的专家 Agent 名称。
  */
 public enum AgentName {
-    MEMORY_AGENT,
+    RESEARCH_CONTEXT_AGENT,
     SUPERVISOR_AGENT,
-    KNOWLEDGE_AGENT,
-    RISK_GUARDIAN_AGENT,
-    COMPANION_AGENT,
-    COUNSELOR_AGENT
+    EVIDENCE_AGENT,
+    EVIDENCE_CRITIC_AGENT,
+    RESEARCH_ASSISTANT_AGENT,
+    DECISION_AGENT
 }

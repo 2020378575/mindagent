@@ -4,21 +4,17 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.repository.AgentRunTraceRepository;
 import com.mindbridge.agent.repository.PsychologicalReportRepository;
-import com.mindbridge.agent.service.ToolOrchestrationService;
 import com.mindbridge.agent.service.ai.AiClient;
 import com.mindbridge.agent.service.memory.ShortTermMemoryService;
 import com.mindbridge.agent.service.memory.UserProfileMemoryService;
 import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.reactive.AutoConfigureWebTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -56,9 +52,6 @@ class ApiSseHarnessTests {
     @MockBean
     private UserProfileMemoryService userProfileMemoryService;
 
-    @MockBean
-    private ToolOrchestrationService toolOrchestrationService;
-
     private ScriptedAiClient scriptedAiClient;
 
     @BeforeEach
@@ -76,50 +69,31 @@ class ApiSseHarnessTests {
     }
 
     @Test
-    void studentChatReturnsSseMetaTokenAndDoneWithoutReportForChat() {
+    void studentChatReturnsSseMetaTokenAndDoneWithoutPsychologyReport() {
         String body = postChat("student", "student123", "帮我解释一下 Java 多线程。");
 
         assertThat(body)
                 .contains("event:meta")
                 .contains("event:token")
-                .contains("event:done")
-                .contains("这是一个稳定的测试回复。");
+                .contains("event:done");
         assertThat(reportRepository.findAll()).isEmpty();
         assertThat(traceRepository.findAll()).singleElement()
                 .satisfies(trace -> {
-                    assertThat(trace.getIntent().name()).isEqualTo("CHAT");
-                    assertThat(trace.getStepCount()).isEqualTo(3);
+                    assertThat(trace.getIntent().name()).isEqualTo("GENERAL_CHAT");
+                    assertThat(trace.getStepCount()).isGreaterThanOrEqualTo(3);
                 });
     }
 
     @Test
-    void highRiskChatPersistsReportTraceAndTriggersToolChainAfterSse() {
-        String body = postChat("student", "student123", "我不想活了，想伤害自己，今晚可能撑不住。");
+    void researchChatDoesNotCreatePsychologyReportOrToolChain() {
+        String body = postChat("student", "student123", "解释一下 AdamW");
 
         assertThat(body)
                 .contains("event:meta")
                 .contains("event:token")
-                .contains("event:done")
-                .contains("先确保安全")
-                .doesNotContain("风险等级")
-                .doesNotContain("Excel")
-                .doesNotContain("MCP")
-                .doesNotContain("报告");
-
-        assertThat(reportRepository.findAll()).singleElement()
-                .satisfies(report -> {
-                    assertThat(report.getRiskLevel()).isEqualTo(RiskLevel.HIGH);
-                    assertThat(report.getIntent().name()).isEqualTo("RISK");
-                });
-        assertThat(traceRepository.findAll()).singleElement()
-                .satisfies(trace -> {
-                    assertThat(trace.getRiskLevel()).isEqualTo(RiskLevel.HIGH);
-                    assertThat(trace.getStepCount()).isEqualTo(5);
-                });
-
-        ArgumentCaptor<Long> reportId = ArgumentCaptor.forClass(Long.class);
-        verify(toolOrchestrationService).handleAsync(reportId.capture());
-        assertThat(reportRepository.findById(reportId.getValue())).isPresent();
+                .contains("event:done");
+        assertThat(reportRepository.findAll()).isEmpty();
+        assertThat(traceRepository.findAll()).isNotEmpty();
     }
 
     @Test

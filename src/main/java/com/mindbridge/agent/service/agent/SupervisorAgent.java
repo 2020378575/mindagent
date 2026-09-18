@@ -5,12 +5,10 @@ import com.mindbridge.agent.service.IntentClassifier;
 import org.springframework.stereotype.Component;
 
 /**
- * 主控 Agent。
- *
- * <p>Supervisor 负责把本轮输入路由到普通陪伴、心理咨询或风险守护链路。</p>
+ * 主控路由：把输入映射到研究意图路径。
  */
 @Component
-public class SupervisorAgent implements MindBridgeAgent {
+public class SupervisorAgent implements ResearchAgent {
 
     private final IntentClassifier intentClassifier;
 
@@ -25,18 +23,16 @@ public class SupervisorAgent implements MindBridgeAgent {
 
     @Override
     public boolean supports(AgentContext context) {
-        return context.memoryLoaded() && !context.intentRouted();
+        return context.contextLoaded() && !context.intentRouted();
     }
 
     @Override
     public AgentDecision act(AgentContext context) {
-        IntentType intent = intentClassifier.classify(context.modelInput(), context.modelHistory());
+        IntentType intent = context.expectedIntent() != null
+                ? context.expectedIntent()
+                : intentClassifier.classify(context.modelInput()).intent();
         context.setIntent(intent);
         context.markIntentRouted();
-        if (intent == IntentType.CHAT) {
-            context.markKnowledgeHandled();
-            context.markRiskAssessed();
-        }
         return AgentDecision.continueWith(AgentAction.ROUTE_INTENT, "intent=%s".formatted(intent));
     }
 }

@@ -1,27 +1,25 @@
 package com.mindbridge.agent.service;
 
 import com.mindbridge.agent.domain.IntentType;
+import com.mindbridge.agent.service.agent.IntentClassification;
 import com.mindbridge.agent.service.ai.AiClient;
-import com.mindbridge.agent.service.ai.AiMessage;
 import com.mindbridge.agent.service.ai.PromptTemplates;
-import com.mindbridge.agent.service.ai.RiskLexicon;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.stereotype.Service;
 
 @Service
 /**
- * 用户意图分类服务。
- *
- * <p>把每轮输入路由到普通聊天、心理咨询或高风险处理链路。</p>
+ * 研究意图分类。优先硬规则，模型仅作兜底。
  */
 public class IntentClassifier {
 
-    private static final List<String> GENERAL_TASK_WORDS = List.of(
-            "java", "python", "javascript", "代码", "编程", "程序", "算法", "数据库", "spring", "maven",
-            "前端", "后端", "项目", "接口", "bug", "报错", "作业", "论文", "翻译", "总结", "解释",
-            "怎么写", "如何", "是什么", "为什么", "给我", "帮我", "推荐", "查询", "天气", "路线"
-    );
+    private static final List<String> DECISION_WORDS = List.of(
+            "该选", "还是", "决策", "选择", "对比", "取舍", "优先", "推荐方案", "lora", "qlora");
+    private static final List<String> REVIEW_WORDS = List.of(
+            "是否验证", "验证了", "实验结果", "run-", "复核", "对照实验", "是否支持之前");
+    private static final List<String> EVIDENCE_WORDS = List.of(
+            "论文", "配置", "证据", "出处", "引用", "量化", "哪一页", "使用了什么", "根据资料");
 
     private final AiClient aiClient;
 
@@ -29,54 +27,42 @@ public class IntentClassifier {
         this.aiClient = aiClient;
     }
 
-    public IntentType classify(String input) {
-        return classify(input, List.of());
-    }
-
-    public IntentType classify(String input, List<AiMessage> history) {
-        String normalized = input.toLowerCase(Locale.ROOT);
-        // 高风险表达优先级最高，不交给普通任务规则覆盖。
-        if (RiskLexicon.hasHighRiskSignal(normalized)) {
-            return IntentType.RISK;
+    public IntentClassification classify(String input) {
+        String normalized = input == null ? "" : input.toLowerCase(Locale.ROOT);
+        if (containsAny(normalized, REVIEW_WORDS)) {
+            return new IntentClassification(IntentType.RESULT_REVIEW, 0.9);
         }
-        // 学习、编程、作业等明确普通任务直接走 CHAT，避免误触发后台评估。
-        if (isClearlyGeneralTask(normalized)) {
-            return IntentType.CHAT;
+        if (containsAny(normalized, DECISION_WORDS) && (normalized.contains("还是") || normalized.contains("该选")
+                || normalized.contains("选择") || normalized.contains("决策"))) {
+            return new IntentClassification(IntentType.RESEARCH_DECISION, 0.88);
+        }
+        if (containsAny(normalized, EVIDENCE_WORDS)) {
+            return new IntentClassification(IntentType.EVIDENCE_QUERY, 0.85);
         }
         try {
-            String label = aiClient.complete(PromptTemplates.intentPrompt(history, input)).trim().toUpperCase();
-            if (label.contains("RISK")) {
-                return IntentType.RISK;
+            String label = aiClient.complete(PromptTemplates.intentPrompt(input)).trim().toUpperCase(Locale.ROOT);
+            if (label.contains("RESULT_REVIEW") || label.contains("REVIEW")) {
+                return new IntentClassification(IntentType.RESULT_REVIEW, 0.7);
             }
-            if (label.contains("CONSULT")) {
-                return IntentType.CONSULT;
+            if (label.contains("RESEARCH_DECISION") || label.contains("DECISION")) {
+                return new IntentClassification(IntentType.RESEARCH_DECISION, 0.7);
             }
-            if (label.contains("CHAT")) {
-                return IntentType.CHAT;
+            if (label.contains("EVIDENCE_QUERY") || label.contains("EVIDENCE")) {
+                return new IntentClassification(IntentType.EVIDENCE_QUERY, 0.7);
+            }
+            if (label.contains("GENERAL_CHAT") || label.equals("CHAT")) {
+                return new IntentClassification(IntentType.GENERAL_CHAT, 0.7);
             }
         } catch (Exception ignored) {
-            // Keyword fallback keeps the route deterministic when the model is unavailable.
+            // keyword fallback below
         }
-        if (RiskLexicon.hasConsultSignal(normalized) || hasRecentConsultContext(history)) {
-            return IntentType.CONSULT;
+        if (containsAny(normalized, DECISION_WORDS)) {
+            return new IntentClassification(IntentType.RESEARCH_DECISION, 0.6);
         }
-        return IntentType.CHAT;
+        return new IntentClassification(IntentType.GENERAL_CHAT, 0.55);
     }
 
-    private boolean isClearlyGeneralTask(String input) {
-        if (RiskLexicon.hasConsultSignal(input)) {
-            return false;
-        }
-        return GENERAL_TASK_WORDS.stream().anyMatch(input::contains);
-    }
-
-    private boolean hasRecentConsultContext(List<AiMessage> history) {
-        if (history == null || history.isEmpty()) {
-            return false;
-        }
-        return history.stream()
-                .skip(Math.max(0, history.size() - 6))
-                .map(message -> message.content().toLowerCase())
-                .anyMatch(RiskLexicon::hasConsultSignal);
+    private boolean containsAny(String input, List<String> words) {
+        return words.stream().anyMatch(input::contains);
     }
 }
