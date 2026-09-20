@@ -66,7 +66,8 @@ public class ResearchWorkspaceService {
         List<DecisionRecord> decisions = decisionService.list(userId, projectId);
         List<ExperimentRun> experiments = experimentService.list(userId, projectId);
         WorkspaceActiveDecision active = decisions.stream()
-                .filter(decision -> decision.getStatus() != DecisionStatus.DRAFT)
+                .filter(decision -> decision.getStatus() != DecisionStatus.DRAFT
+                        && decision.getStatus() != DecisionStatus.DISCARDED)
                 .findFirst()
                 .map(this::toActiveDecision)
                 .orElse(null);

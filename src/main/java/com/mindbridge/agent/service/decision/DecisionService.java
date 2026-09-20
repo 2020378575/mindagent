@@ -152,6 +152,29 @@ public class DecisionService {
     }
 
     @Transactional
+    public DecisionRecord discard(Long userId, Long projectId, Long decisionId) {
+        DecisionRecord decision = requireOwned(userId, projectId, decisionId);
+        if (decision.getStatus() != DecisionStatus.DRAFT) {
+            throw new IllegalStateException(INVALID_TRANSITION);
+        }
+        decision.setStatus(DecisionStatus.DISCARDED);
+        decision.touch();
+        DecisionRecord saved = decisionRecordRepository.save(decision);
+        if (saved.getTaskId() != null) {
+            ResearchTask task = researchTaskService.getRequired(saved.getTaskId());
+            if (task.getStatus() == ResearchTaskStatus.WAITING_FOR_CONFIRMATION) {
+                researchTaskService.cancel(userId, projectId, task.getPublicId());
+            }
+        }
+        longTermMemoryService.rememberProjectEvent(projectId, new ResearchProjectEvent(
+                "DECISION_DISCARDED",
+                "v%d discarded: %s".formatted(saved.getVersion(), saved.getRecommendation()),
+                saved.getId(),
+                Instant.now()));
+        return saved;
+    }
+
+    @Transactional
     public DecisionRecord regenerate(Long userId, Long projectId, Long previousDecisionId, Long taskId) {
         DecisionRecord previous = requireOwned(userId, projectId, previousDecisionId);
         if (previous.getStatus() == DecisionStatus.DRAFT) {

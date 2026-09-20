@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(DecisionController.PATH)
@@ -33,67 +34,77 @@ public class DecisionController {
     }
 
     @GetMapping
-    public List<DecisionResponse> list(
+    public Mono<List<DecisionResponse>> list(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId
     ) {
-        return owned(() -> decisionService.list(currentUser.getId(), projectId)).stream()
+        return BlockingRequests.supply(() -> owned(() -> decisionService.list(currentUser.getId(), projectId)).stream()
                 .map(DecisionResponse::from)
-                .toList();
+                .toList());
     }
 
     @PostMapping("/from-task/{taskId}")
-    public DecisionResponse createDraftFromTask(
+    public Mono<DecisionResponse> createDraftFromTask(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable Long taskId
     ) {
-        return DecisionResponse.from(owned(() ->
-                decisionService.createDraftFromTask(currentUser.getId(), projectId, taskId)));
+        return BlockingRequests.supply(() -> DecisionResponse.from(owned(() ->
+                decisionService.createDraftFromTask(currentUser.getId(), projectId, taskId))));
     }
 
     @PostMapping("/{decisionId}/confirm")
-    public DecisionResponse confirm(
+    public Mono<DecisionResponse> confirm(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable Long decisionId,
             @RequestBody(required = false) @Valid ConfirmDecisionRequest request
     ) {
-        return DecisionResponse.from(owned(() ->
-                decisionService.confirm(currentUser.getId(), projectId, decisionId)));
+        return BlockingRequests.supply(() -> DecisionResponse.from(owned(() ->
+                decisionService.confirm(currentUser.getId(), projectId, decisionId))));
+    }
+
+    @PostMapping("/{decisionId}/discard")
+    public Mono<DecisionResponse> discard(
+            @AuthenticationPrincipal CurrentUser currentUser,
+            @PathVariable Long projectId,
+            @PathVariable Long decisionId
+    ) {
+        return BlockingRequests.supply(() -> DecisionResponse.from(owned(() ->
+                decisionService.discard(currentUser.getId(), projectId, decisionId))));
     }
 
     @PostMapping("/{decisionId}/regenerate")
-    public DecisionResponse regenerate(
+    public Mono<DecisionResponse> regenerate(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable Long decisionId,
             @RequestParam Long taskId
     ) {
-        return DecisionResponse.from(owned(() ->
-                decisionService.regenerate(currentUser.getId(), projectId, decisionId, taskId)));
+        return BlockingRequests.supply(() -> DecisionResponse.from(owned(() ->
+                decisionService.regenerate(currentUser.getId(), projectId, decisionId, taskId))));
     }
 
     @PostMapping("/{decisionId}/start-validation")
-    public DecisionResponse startValidation(
+    public Mono<DecisionResponse> startValidation(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable Long decisionId,
             @RequestParam Long experimentId
     ) {
-        return DecisionResponse.from(owned(() ->
-                decisionService.startValidation(currentUser.getId(), projectId, decisionId, experimentId)));
+        return BlockingRequests.supply(() -> DecisionResponse.from(owned(() ->
+                decisionService.startValidation(currentUser.getId(), projectId, decisionId, experimentId))));
     }
 
     @PostMapping("/{decisionId}/reviews/{reviewTaskId}")
-    public DecisionReviewResponse confirmReview(
+    public Mono<DecisionReviewResponse> confirmReview(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable Long decisionId,
             @PathVariable Long reviewTaskId
     ) {
-        return DecisionReviewResponse.from(owned(() ->
-                decisionService.confirmReview(currentUser.getId(), projectId, decisionId, reviewTaskId)));
+        return BlockingRequests.supply(() -> DecisionReviewResponse.from(owned(() ->
+                decisionService.confirmReview(currentUser.getId(), projectId, decisionId, reviewTaskId))));
     }
 
     private <T> T owned(Supplier<T> action) {

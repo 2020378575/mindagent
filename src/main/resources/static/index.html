@@ -4,72 +4,98 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>EvidenceLab</title>
-  <link rel="stylesheet" href="/styles.css?v=20260918-workspace">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,650&family=Figtree:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css?v=20260919-confirm-api">
   <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 </head>
-<body>
-  <div id="app" class="app-shell">
+<body class="auth-guest">
+  <div class="ambient" aria-hidden="true"></div>
+
+  <section id="loginStage" class="login-stage">
+    <div class="login-stage__visual">
+      <p class="brand-kicker">Research Evidence Workbench</p>
+      <h1 class="brand-hero">EvidenceLab</h1>
+      <p class="brand-lead">把论文、实验日志与决策草稿放进同一条可审计证据链。</p>
+    </div>
+    <form id="loginForm" class="login-form">
+      <h2>进入工作区</h2>
+      <p id="loginState" class="form-hint">演示账号 student / student123</p>
+      <label class="field">
+        <span>账号</span>
+        <input id="username" value="student" autocomplete="username">
+      </label>
+      <label class="field">
+        <span>密码</span>
+        <input id="password" type="password" value="student123" autocomplete="current-password">
+      </label>
+      <button type="submit" class="btn btn-primary btn-block">登录</button>
+      <div class="login-meta">
+        <span id="serviceState" class="meta-dot">连接中</span>
+        <span id="modelState" class="meta-dot">模型：读取中</span>
+      </div>
+    </form>
+  </section>
+
+  <div id="app" class="app-shell" hidden>
     <aside class="rail">
       <div class="brand">
-        <div class="mark">EL</div>
+        <div class="mark" aria-hidden="true">EL</div>
         <div>
-          <p class="eyebrow">Research Workbench</p>
-          <h1>EvidenceLab</h1>
+          <p class="brand-sub">EvidenceLab</p>
+          <p class="brand-tag">证据工作台</p>
         </div>
       </div>
-      <p id="serviceState" class="status-pill">连接中</p>
-      <p id="modelState" class="status-pill">模型：读取中</p>
 
-      <form id="loginForm" class="panel">
-        <h2>登录</h2>
-        <p id="loginState" class="muted">student / student123</p>
-        <label class="field"><span>账号</span><input id="username" value="student" autocomplete="username"></label>
-        <label class="field"><span>密码</span><input id="password" type="password" value="student123" autocomplete="current-password"></label>
-        <button type="submit" class="primary">进入工作区</button>
-      </form>
-
-      <section id="accountPanel" class="panel" hidden>
-        <p class="eyebrow">当前账号</p>
+      <section id="accountPanel" class="account">
+        <p class="label">当前账号</p>
         <h2 id="activeAccount">已登录</h2>
         <p id="activeRole" class="muted"></p>
-        <button id="switchAccount" type="button" class="ghost">切换账号</button>
+        <button id="switchAccount" type="button" class="btn btn-ghost btn-sm">切换账号</button>
       </section>
 
-      <nav id="projectNav" class="nav" hidden>
+      <nav id="projectNav" class="nav" aria-label="工作区导航">
         <button type="button" data-view="overview" class="nav-item active">项目概览</button>
         <button type="button" data-view="decisions" class="nav-item">决策账本</button>
         <button type="button" data-view="experiments" class="nav-item">实验记录</button>
         <button type="button" data-view="sources" class="nav-item">证据库</button>
         <button type="button" data-view="tasks" class="nav-item">Agent 轨迹</button>
       </nav>
+
+      <div class="rail-foot">
+        <span id="serviceStateLive" class="meta-dot">—</span>
+        <span id="modelStateLive" class="meta-dot">—</span>
+      </div>
     </aside>
 
     <main class="main">
       <header class="topbar">
-        <div>
-          <p class="eyebrow">当前项目</p>
+        <div class="topbar-copy">
+          <p class="label">当前项目</p>
           <h2 id="projectTitle">未选择项目</h2>
           <p id="projectObjective" class="muted">登录后创建或选择研究项目。</p>
         </div>
         <div class="topbar-actions">
-          <button id="openAssistant" type="button" class="ghost" hidden>研究助手</button>
-          <button id="refreshWorkspace" type="button" class="ghost" hidden>刷新</button>
+          <button id="backToProjects" type="button" class="btn btn-ghost" hidden>全部项目</button>
+          <button id="openAssistant" type="button" class="btn btn-ghost" hidden>研究助手</button>
+          <button id="refreshWorkspace" type="button" class="btn btn-ghost" hidden>刷新</button>
         </div>
       </header>
 
-      <section id="projectPicker" class="panel">
-        <div class="panel-head">
+      <section id="projectPicker" class="section">
+        <div class="section-head">
           <h3>项目列表</h3>
-          <button id="createProjectBtn" type="button" class="primary">新建项目</button>
+          <button id="createProjectBtn" type="button" class="btn btn-primary">新建项目</button>
         </div>
         <div id="projectList" class="stack"></div>
-        <form id="createProjectForm" class="stack" hidden>
+        <form id="createProjectForm" class="create-form" hidden>
           <label class="field"><span>名称</span><input id="projectName" required maxlength="120"></label>
           <label class="field"><span>研究目标</span><textarea id="projectObjectiveInput" required maxlength="4000"></textarea></label>
           <label class="field"><span>约束（可选）</span><textarea id="projectConstraints" maxlength="4000"></textarea></label>
           <div class="row">
-            <button type="submit" class="primary">创建</button>
-            <button id="cancelCreateProject" type="button" class="ghost">取消</button>
+            <button type="submit" class="btn btn-primary">创建</button>
+            <button id="cancelCreateProject" type="button" class="btn btn-ghost">取消</button>
           </div>
         </form>
       </section>
@@ -78,41 +104,41 @@
         <p id="workspaceBanner" class="banner" hidden></p>
 
         <section id="view-overview" class="view">
-          <article id="activeDecisionCard" class="decision-card empty">
-            <p class="eyebrow">ACTIVE DECISION</p>
+          <article id="activeDecisionCard" class="decision-hero empty">
+            <p class="label">Active Decision</p>
             <h3>暂无已确认决策</h3>
             <p class="muted">发起正式决策任务后，确认的推荐会出现在这里。</p>
           </article>
-          <div class="grid-2">
-            <article class="panel">
+          <div class="split">
+            <section class="section">
               <h3>下一步最小实验</h3>
               <p id="nextExperiment" class="muted">确认决策后显示。</p>
-            </article>
-            <article class="panel">
+            </section>
+            <section class="section">
               <h3>证据缺口</h3>
               <ul id="evidenceGaps" class="bullets"><li class="muted">无</li></ul>
-            </article>
+            </section>
           </div>
         </section>
 
         <section id="view-decisions" class="view" hidden>
-          <div class="panel-head">
+          <div class="section-head">
             <h3>决策账本</h3>
-            <button id="startDecisionTask" type="button" class="primary">发起决策任务</button>
+            <button id="startDecisionTask" type="button" class="btn btn-primary">发起决策任务</button>
           </div>
           <div id="decisionList" class="stack"></div>
         </section>
 
         <section id="view-experiments" class="view" hidden>
-          <div class="panel-head">
+          <div class="section-head">
             <h3>实验记录</h3>
-            <button id="createExperimentBtn" type="button" class="primary">新建实验</button>
+            <button id="createExperimentBtn" type="button" class="btn btn-primary">新建实验</button>
           </div>
           <div id="experimentList" class="stack"></div>
         </section>
 
         <section id="view-sources" class="view" hidden>
-          <div class="panel-head">
+          <div class="section-head">
             <h3>证据库</h3>
             <label class="upload">
               <span>上传 PDF / MD / TXT</span>
@@ -123,9 +149,9 @@
         </section>
 
         <section id="view-tasks" class="view" hidden>
-          <div class="panel-head">
+          <div class="section-head">
             <h3>Agent 轨迹 / 任务</h3>
-            <button id="retryFailedTask" type="button" class="ghost">重试最近失败任务</button>
+            <button id="retryFailedTask" type="button" class="btn btn-ghost">重试最近失败任务</button>
           </div>
           <div id="taskList" class="stack"></div>
         </section>
@@ -134,20 +160,43 @@
 
     <aside id="assistantDrawer" class="drawer" hidden>
       <div class="drawer-head">
-        <h3>研究助手</h3>
-        <button id="closeAssistant" type="button" class="ghost">关闭</button>
+        <div>
+          <p class="label">Assistant</p>
+          <h3>研究助手</h3>
+        </div>
+        <button id="closeAssistant" type="button" class="btn btn-ghost btn-sm">关闭</button>
       </div>
-      <p class="muted">普通问答不会自动创建决策。正式决策请用「发起决策任务」。</p>
+      <p class="muted drawer-note">普通问答不会自动创建决策。正式决策请用「发起决策任务」。</p>
       <div id="assistantMessages" class="chat-log"></div>
       <form id="assistantForm" class="assistant-form">
         <textarea id="assistantInput" rows="3" placeholder="解释概念、询问资料，或描述约束…"></textarea>
         <div class="row">
-          <button type="submit" class="primary">普通回答</button>
-          <button id="assistantDecisionBtn" type="button" class="ghost">转为决策任务</button>
+          <button type="submit" class="btn btn-primary">普通回答</button>
+          <button id="assistantDecisionBtn" type="button" class="btn btn-ghost">转为决策任务</button>
         </div>
       </form>
     </aside>
   </div>
-  <script src="/app.js?v=20260918-workspace"></script>
+
+  <div id="promptModal" class="modal" hidden>
+    <div class="modal-backdrop" data-modal-dismiss></div>
+    <div class="modal-dialog" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+      <form id="promptModalForm" class="modal-panel">
+        <p class="label" id="promptModalKicker">Input</p>
+        <h3 id="promptModalTitle">请输入</h3>
+        <p id="promptModalHint" class="muted modal-hint" hidden></p>
+        <label class="field" id="promptModalField">
+          <span id="promptModalLabel" class="sr-only">内容</span>
+          <textarea id="promptModalInput" rows="4"></textarea>
+        </label>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-ghost" data-modal-dismiss id="promptModalCancel">取消</button>
+          <button type="submit" class="btn btn-primary" id="promptModalConfirm">确定</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/app.js?v=20260919-confirm-api"></script>
 </body>
 </html>

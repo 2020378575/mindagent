@@ -7,5 +7,6 @@ public enum DecisionStatus {
     DRAFT,
     CONFIRMED,
     VALIDATING,
-    REVIEWED
+    REVIEWED,
+    DISCARDED
 }
