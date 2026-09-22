@@ -16,9 +16,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 public class ResearchSourceService {
 
-    static final String SOURCE_NOT_FOUND_MESSAGE = "Research source not found";
+    public static final String SOURCE_NOT_FOUND_MESSAGE = "Research source not found";
     static final String EMPTY_FILE_MESSAGE = "Research source file is empty";
-    static final String FILE_TOO_LARGE_MESSAGE = "Research source file exceeds 10MB";
+    public static final String FILE_TOO_LARGE_MESSAGE = "Research source file exceeds 10MB";
     public static final int MAX_FILE_BYTES = 10 * 1024 * 1024;
     static final int MAX_FAILURE_MESSAGE_LENGTH = 500;
 

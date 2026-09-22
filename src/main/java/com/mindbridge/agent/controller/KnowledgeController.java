@@ -5,10 +5,6 @@ import com.mindbridge.agent.dto.KnowledgeIngestResponse;
 import com.mindbridge.agent.service.knowledge.KnowledgeFileService;
 import com.mindbridge.agent.service.knowledge.KnowledgeService;
 import jakarta.validation.Valid;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.multipart.FilePart;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -17,6 +13,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping("/api/admin/knowledge")
@@ -43,25 +40,13 @@ public class KnowledgeController {
     }
 
     @PostMapping(value = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    public Mono<KnowledgeIngestResponse> ingestFile(@RequestPart("file") FilePart file) {
+    public Mono<KnowledgeIngestResponse> ingestFile(@RequestPart(UploadBuffers.FILE_PART_NAME) FilePart file) {
         // WebFlux 的 FilePart 是流式数据，这里合并成 byte[] 后交给文件解析服务。
-        return DataBufferUtils.join(file.content())
-                .map(dataBuffer -> {
-                    byte[] bytes = readBytes(dataBuffer);
+        return UploadBuffers.read(file)
+                .publishOn(Schedulers.boundedElastic())
+                .map(bytes -> {
                     int chunks = knowledgeFileService.ingest(file.filename(), bytes);
                     return new KnowledgeIngestResponse(file.filename(), chunks);
                 });
-    }
-
-    private byte[] readBytes(DataBuffer dataBuffer) {
-        try {
-            ByteArrayOutputStream output = new ByteArrayOutputStream(dataBuffer.readableByteCount());
-            dataBuffer.asInputStream().transferTo(output);
-            return output.toByteArray();
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("文件读取失败：" + exception.getMessage());
-        } finally {
-            DataBufferUtils.release(dataBuffer);
-        }
     }
 }

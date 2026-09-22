@@ -11,13 +11,9 @@ import com.mindbridge.agent.security.CurrentUser;
 import com.mindbridge.agent.service.document.ResearchSourceService;
 import com.mindbridge.agent.service.task.ResearchTaskExecutor;
 import com.mindbridge.agent.service.task.ResearchTaskService;
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.Supplier;
-import org.springframework.core.io.buffer.DataBuffer;
-import org.springframework.core.io.buffer.DataBufferUtils;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
@@ -31,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestPart;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Schedulers;
 
 @RestController
 @RequestMapping(ResearchSourceController.SOURCES_PATH)
@@ -59,11 +56,11 @@ public class ResearchSourceController {
     public Mono<ResponseEntity<CreateSourceResponse>> upload(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
-            @RequestPart("file") FilePart file
+            @RequestPart(UploadBuffers.FILE_PART_NAME) FilePart file
     ) {
-        return DataBufferUtils.join(file.content())
-                .map(buffer -> {
-                    byte[] bytes = readBytes(buffer);
+        return UploadBuffers.read(file)
+                .publishOn(Schedulers.boundedElastic())
+                .map(bytes -> {
                     try {
                         ResearchSource source = researchSourceService.createPending(
                                 currentUser.getId(),
@@ -109,18 +106,6 @@ public class ResearchSourceController {
     private String contentType(FilePart file) {
         MediaType mediaType = file.headers().getContentType();
         return mediaType == null ? null : mediaType.toString();
-    }
-
-    private byte[] readBytes(DataBuffer dataBuffer) {
-        try {
-            ByteArrayOutputStream output = new ByteArrayOutputStream(dataBuffer.readableByteCount());
-            dataBuffer.asInputStream().transferTo(output);
-            return output.toByteArray();
-        } catch (IOException exception) {
-            throw new IllegalArgumentException("Failed to read uploaded file");
-        } finally {
-            DataBufferUtils.release(dataBuffer);
-        }
     }
 
     private List<ResearchSource> owned(Supplier<List<ResearchSource>> action) {
