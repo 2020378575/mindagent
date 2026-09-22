@@ -26,27 +26,32 @@ EvidenceLab 是面向科研证据工作区的多智能体系统：围绕**项目
 
 ```bash
 export OPENAI_API_KEY=sk-...
+export BOOTSTRAP_ADMIN_USERNAME=admin
+export BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-strong-password'
+export BOOTSTRAP_USER_USERNAME=researcher
+export BOOTSTRAP_USER_PASSWORD='replace-with-a-different-password'
 # 可选：OPENAI_BASE_URL / OPENAI_MODEL
 ./scripts/run-dev.sh
 ```
 
 浏览器打开 [http://localhost:8080](http://localhost:8080)。
 
-默认演示账号（首次启动由 `DataInitializer` 写入）：
-
-| 用户名 | 密码 | 角色 |
-| --- | --- | --- |
-| admin | admin123 | Research Admin |
-| student | student123 | 普通用户 |
+首次启动仅会创建显式配置的初始账号；不再提供默认密码。浏览器只在当前页面内存中保留 Basic 凭据，刷新后需重新登录。旧版存储的登录凭据会在页面加载时清理。
 
 ### Docker Compose
 
 ```bash
 export OPENAI_API_KEY=sk-...
+export BOOTSTRAP_ADMIN_USERNAME=admin
+export BOOTSTRAP_ADMIN_PASSWORD='replace-with-a-strong-password'
+export BOOTSTRAP_USER_USERNAME=researcher
+export BOOTSTRAP_USER_PASSWORD='replace-with-a-different-password'
+export DB_PASSWORD='replace-with-a-database-password'
+export MYSQL_ROOT_PASSWORD='replace-with-another-database-password'
 docker compose up --build
 ```
 
-服务：应用 `8080`、MySQL `3306`、Redis `6379`、Chroma `8000`、Mailpit UI `8025`。
+服务：应用 `8080`；MySQL `3306`、Redis `6379`、Chroma `8000`、Mailpit UI `8025` 仅绑定本机。已有数据库中的旧版固定密码演示账号会在启动时停用；配置同名的新初始凭据可自动轮换密码。
 
 ### 测试与验收
 
@@ -164,6 +169,13 @@ mindbridge:
 | `USE_CHROMA` | 是否启用向量库 |
 | `CHROMA_COLLECTION` | 默认 `evidencelab_knowledge` |
 | `DB_URL` | H2 或 MySQL JDBC |
+| `BOOTSTRAP_ADMIN_USERNAME` / `BOOTSTRAP_ADMIN_PASSWORD` | 显式创建管理员账号；旧演示账号可用此凭据轮换 |
+| `BOOTSTRAP_USER_USERNAME` / `BOOTSTRAP_USER_PASSWORD` | 显式创建普通账号；旧演示账号可用此凭据轮换 |
+| `DB_PASSWORD` / `MYSQL_ROOT_PASSWORD` | Docker Compose 必填，无默认数据库密码 |
+| `MCP_SERVER_ENABLED` | 默认 `false`；启用后 MCP 入口要求管理员认证 |
+| `TASK_RETRY_INITIAL_DELAY` / `TASK_RECOVERY_INTERVAL` | 瞬时失败从 1 秒起指数退避，默认每 30 秒检查待恢复任务 |
+
+项目检索会缓存小型语料（最多 2,000 个 chunk）的 BM25 倒排索引 30 秒，入库后主动失效；多实例更新最晚在缓存过期后可见。超出该规模仍会在查询时扫描语料，应按实际数据量评估专用检索索引。
 
 MySQL profile：`application-mysql.yml`（库名默认 `evidencelab`）。
 
