@@ -15,6 +15,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.time.Duration;
+import java.time.Instant;
+import java.util.concurrent.ConcurrentHashMap;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -23,11 +26,14 @@ import org.springframework.stereotype.Service;
  */
 public class ProjectKnowledgeService {
 
-    static final String SOURCE_NOT_FOUND_MESSAGE = "Research source not found";
+    static final String SOURCE_NOT_FOUND_MESSAGE = ResearchSourceService.SOURCE_NOT_FOUND_MESSAGE;
     static final String EMPTY_CHUNKS_MESSAGE = "Research source has no usable text chunks";
     private static final double VECTOR_WEIGHT = 0.65;
     private static final double BM25_WEIGHT = 0.35;
     private static final int FAILURE_MESSAGE_LIMIT = 500;
+    private static final Duration CORPUS_CACHE_TTL = Duration.ofSeconds(30);
+    private static final int MAX_CACHED_PROJECTS = 100;
+    private static final int MAX_CACHED_CHUNKS = 2_000;
 
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final ResearchSourceRepository researchSourceRepository;
@@ -39,6 +45,7 @@ public class ProjectKnowledgeService {
     private final ObjectMapper objectMapper;
     private final KnowledgeChunker chunker = new KnowledgeChunker();
     private final Bm25Scorer bm25Scorer = new Bm25Scorer();
+    private final Map<Long, CachedCorpus> cachedCorpora = new ConcurrentHashMap<>();
 
     public ProjectKnowledgeService(
             KnowledgeChunkRepository knowledgeChunkRepository,
@@ -99,6 +106,8 @@ public class ProjectKnowledgeService {
         } catch (RuntimeException exception) {
             researchSourceService.markFailed(sourceId, safeFailureMessage(exception));
             throw exception;
+        } finally {
+            cachedCorpora.remove(projectId);
         }
     }
 
@@ -106,9 +115,10 @@ public class ProjectKnowledgeService {
         if (projectId == null || topK <= 0 || query == null || query.isBlank()) {
             return List.of();
         }
-        List<KnowledgeChunk> projectChunks = knowledgeChunkRepository.findByProject_Id(projectId);
+        Bm25Scorer.Index index = corpus(projectId);
+        List<KnowledgeChunk> projectChunks = index.chunks();
         List<SearchResult> vector = vectorCandidates(projectId, query, candidateLimit(topK), projectChunks);
-        List<SearchResult> keyword = bm25Scorer.rank(query, projectChunks, candidateLimit(topK)).stream()
+        List<SearchResult> keyword = bm25Scorer.rank(query, index, candidateLimit(topK)).stream()
                 .filter(result -> projectId.equals(result.projectId()))
                 .toList();
         return expandBestContext(
@@ -116,6 +126,33 @@ public class ProjectKnowledgeService {
                 knowledgeReranker.rerank(query, merge(projectId, vector, keyword), topK),
                 topK
         );
+    }
+
+    private Bm25Scorer.Index corpus(Long projectId) {
+        Instant now = Instant.now();
+        CachedCorpus current = cachedCorpora.get(projectId);
+        if (current != null && now.isBefore(current.expiresAt())) {
+            return current.index();
+        }
+        synchronized (cachedCorpora) {
+            current = cachedCorpora.get(projectId);
+            if (current != null && now.isBefore(current.expiresAt())) {
+                return current.index();
+            }
+            cachedCorpora.remove(projectId);
+            cachedCorpora.entrySet().removeIf(entry -> !now.isBefore(entry.getValue().expiresAt()));
+            Bm25Scorer.Index index = bm25Scorer.index(knowledgeChunkRepository.findByProject_Id(projectId));
+            if (index.chunks().size() <= MAX_CACHED_CHUNKS) {
+                if (cachedCorpora.size() >= MAX_CACHED_PROJECTS) {
+                    cachedCorpora.clear();
+                }
+                cachedCorpora.put(projectId, new CachedCorpus(index, now.plus(CORPUS_CACHE_TTL)));
+            }
+            return index;
+        }
+    }
+
+    private record CachedCorpus(Bm25Scorer.Index index, Instant expiresAt) {
     }
 
     private List<SearchResult> vectorCandidates(
@@ -174,7 +211,8 @@ public class ProjectKnowledgeService {
             double normalizedScore = Math.max(0.0, result.score()) / maxScore;
             double rankBoost = 1.0 / (rank + 1.0);
             double routeScore = normalizedScore * 0.85 + rankBoost * 0.15;
-            HybridCandidate candidate = candidates.computeIfAbsent(candidateKey(result), key -> new HybridCandidate(result));
+            HybridCandidate candidate = candidates.computeIfAbsent(
+                    HybridCandidateKeys.forResult(result), key -> new HybridCandidate(result));
             if (vectorRoute) {
                 candidate.vectorScore = Math.max(candidate.vectorScore, routeScore);
             } else {
@@ -189,13 +227,6 @@ public class ProjectKnowledgeService {
                 .filter(score -> score > 0.0)
                 .max()
                 .orElse(0.0);
-    }
-
-    private String candidateKey(SearchResult result) {
-        if (result.chunkId() != null) {
-            return "id:" + result.chunkId();
-        }
-        return "content:" + result.source() + ":" + result.content();
     }
 
     private List<SearchResult> expandBestContext(Long projectId, List<SearchResult> ranked, int topK) {

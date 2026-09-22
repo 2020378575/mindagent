@@ -22,20 +22,38 @@ public class Bm25Scorer {
         if (limit <= 0 || query == null || query.isBlank() || chunks.isEmpty()) {
             return List.of();
         }
+        return rank(query, index(chunks), limit);
+    }
+
+    public Index index(List<KnowledgeChunk> chunks) {
+        List<KnowledgeChunk> snapshot = List.copyOf(chunks);
+        Map<String, Set<Long>> postings = new HashMap<>();
+        CorpusStats stats = buildCorpusStats(snapshot, postings);
+        Map<Long, KnowledgeChunk> byId = new HashMap<>();
+        snapshot.forEach(chunk -> byId.put(chunk.getId(), chunk));
+        return new Index(snapshot, stats, byId, postings);
+    }
+
+    public List<SearchResult> rank(String query, Index index, int limit) {
+        if (limit <= 0 || query == null || query.isBlank() || index.chunks().isEmpty()) {
+            return List.of();
+        }
         List<String> queryTerms = tokenize(query);
         if (queryTerms.isEmpty()) {
             return List.of();
         }
-        CorpusStats stats = buildCorpusStats(chunks);
-        return chunks.stream()
-                .map(chunk -> SearchResult.fromChunk(chunk, score(queryTerms, stats, chunk)))
+        Set<Long> candidateIds = new HashSet<>();
+        queryTerms.forEach(term -> candidateIds.addAll(index.postings().getOrDefault(term, Set.of())));
+        return candidateIds.stream()
+                .map(index.byId()::get)
+                .map(chunk -> SearchResult.fromChunk(chunk, score(queryTerms, index.stats(), chunk)))
                 .filter(result -> result.score() > 0.0)
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
                 .limit(limit)
                 .toList();
     }
 
-    private CorpusStats buildCorpusStats(List<KnowledgeChunk> chunks) {
+    private CorpusStats buildCorpusStats(List<KnowledgeChunk> chunks, Map<String, Set<Long>> postings) {
         Map<Long, Map<String, Integer>> termFrequencies = new HashMap<>();
         Map<Long, Integer> lengths = new HashMap<>();
         Map<String, Integer> documentFrequencies = new HashMap<>();
@@ -55,6 +73,7 @@ public class Bm25Scorer {
             Set<String> uniqueTerms = new HashSet<>(terms);
             for (String term : uniqueTerms) {
                 documentFrequencies.merge(term, 1, Integer::sum);
+                postings.computeIfAbsent(term, ignored -> new HashSet<>()).add(key);
             }
         }
 
@@ -118,5 +137,25 @@ public class Bm25Scorer {
             Map<Long, Integer> lengths,
             Map<String, Integer> documentFrequencies
     ) {
+    }
+
+    public static final class Index {
+        private final List<KnowledgeChunk> chunks;
+        private final CorpusStats stats;
+        private final Map<Long, KnowledgeChunk> byId;
+        private final Map<String, Set<Long>> postings;
+
+        private Index(List<KnowledgeChunk> chunks, CorpusStats stats,
+                      Map<Long, KnowledgeChunk> byId, Map<String, Set<Long>> postings) {
+            this.chunks = chunks;
+            this.stats = stats;
+            this.byId = byId;
+            this.postings = postings;
+        }
+
+        public List<KnowledgeChunk> chunks() { return chunks; }
+        private CorpusStats stats() { return stats; }
+        private Map<Long, KnowledgeChunk> byId() { return byId; }
+        private Map<String, Set<Long>> postings() { return postings; }
     }
 }

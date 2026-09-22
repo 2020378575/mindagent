@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -163,6 +164,26 @@ class ProjectKnowledgeServiceTests {
         assertThat(store)
                 .extracting(KnowledgeChunk::getHeading)
                 .containsExactly("LoRA", "QLoRA");
+    }
+
+    @Test
+    void repeatedRetrievalReusesProjectCorpus() {
+        service.ingest(PROJECT_A, SOURCE_A, document("LoRA evidence"));
+        service.retrieve(PROJECT_A, "LoRA", 2);
+        service.retrieve(PROJECT_A, "LoRA", 2);
+        verify(chunkRepository, times(1)).findByProject_Id(PROJECT_A);
+    }
+
+    @Test
+    void newSourceInvalidatesProjectCorpus() {
+        service.ingest(PROJECT_A, SOURCE_A, document("LoRA evidence"));
+        service.retrieve(PROJECT_A, "LoRA", 2);
+        service.ingest(PROJECT_A, SOURCE_A, document("fresh QLoRA evidence"));
+
+        List<SearchResult> refreshed = service.retrieve(PROJECT_A, "fresh", 2);
+
+        assertThat(refreshed).extracting(SearchResult::content).anyMatch(content -> content.contains("fresh"));
+        verify(chunkRepository, times(2)).findByProject_Id(PROJECT_A);
     }
 
     private ParsedDocument document(String content) {

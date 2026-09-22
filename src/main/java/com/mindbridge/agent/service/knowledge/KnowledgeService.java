@@ -10,6 +10,8 @@ import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.time.Instant;
+import java.time.Duration;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -23,6 +25,8 @@ public class KnowledgeService {
 
     private static final double VECTOR_WEIGHT = 0.65;
     private static final double BM25_WEIGHT = 0.35;
+    private static final Duration CORPUS_CACHE_TTL = Duration.ofSeconds(30);
+    private static final int MAX_CACHED_CHUNKS = 2_000;
 
     private final KnowledgeChunkRepository knowledgeChunkRepository;
     private final MindBridgeProperties properties;
@@ -32,6 +36,7 @@ public class KnowledgeService {
     private final ObjectMapper objectMapper;
     private final KnowledgeChunker chunker = new KnowledgeChunker();
     private final Bm25Scorer bm25Scorer = new Bm25Scorer();
+    private volatile CachedCorpus cachedCorpus;
 
     public KnowledgeService(
             KnowledgeChunkRepository knowledgeChunkRepository,
@@ -68,6 +73,7 @@ public class KnowledgeService {
             KnowledgeChunk saved = knowledgeChunkRepository.save(chunk);
             chromaGateway.mirror(saved);
         }
+        cachedCorpus = null;
         return chunks.size();
     }
 
@@ -77,12 +83,33 @@ public class KnowledgeService {
             return List.of();
         }
         int candidateLimit = Math.max(Math.max(topK * 4, 20), properties.getKnowledge().getRerankerCandidateLimit());
-        List<KnowledgeChunk> chunks = knowledgeChunkRepository.findAll();
+        Bm25Scorer.Index index = corpus();
+        List<KnowledgeChunk> chunks = index.chunks();
         List<SearchResult> vectorResults = retrieveByVector(query, candidateLimit, chunks);
-        List<SearchResult> bm25Results = bm25Scorer.rank(query, chunks, candidateLimit);
+        List<SearchResult> bm25Results = bm25Scorer.rank(query, index, candidateLimit);
         List<SearchResult> hybridCandidates = mergeHybridResults(vectorResults, bm25Results, candidateLimit);
         List<SearchResult> reranked = knowledgeReranker.rerank(query, hybridCandidates, topK);
         return expandBestContext(reranked, topK);
+    }
+
+    private Bm25Scorer.Index corpus() {
+        CachedCorpus current = cachedCorpus;
+        Instant now = Instant.now();
+        if (current != null && now.isBefore(current.expiresAt())) {
+            return current.index();
+        }
+        synchronized (this) {
+            current = cachedCorpus;
+            if (current == null || !now.isBefore(current.expiresAt())) {
+                current = new CachedCorpus(
+                        bm25Scorer.index(knowledgeChunkRepository.findAll()), now.plus(CORPUS_CACHE_TTL));
+                cachedCorpus = current.index().chunks().size() <= MAX_CACHED_CHUNKS ? current : null;
+            }
+            return current.index();
+        }
+    }
+
+    private record CachedCorpus(Bm25Scorer.Index index, Instant expiresAt) {
     }
 
     private List<SearchResult> retrieveByVector(String query, int limit, List<KnowledgeChunk> chunks) {
@@ -139,7 +166,8 @@ public class KnowledgeService {
             double normalizedScore = Math.max(0.0, result.score()) / maxScore;
             double rankBoost = 1.0 / (rank + 1.0);
             double routeScore = normalizedScore * 0.85 + rankBoost * 0.15;
-            HybridCandidate candidate = candidates.computeIfAbsent(candidateKey(result), key -> new HybridCandidate(result));
+            HybridCandidate candidate = candidates.computeIfAbsent(
+                    HybridCandidateKeys.forResult(result), key -> new HybridCandidate(result));
             if (vectorRoute) {
                 candidate.vectorScore = Math.max(candidate.vectorScore, routeScore);
             } else {
@@ -154,13 +182,6 @@ public class KnowledgeService {
                 .filter(score -> score > 0.0)
                 .max()
                 .orElse(0.0);
-    }
-
-    private String candidateKey(SearchResult result) {
-        if (result.chunkId() != null) {
-            return "id:" + result.chunkId();
-        }
-        return "content:" + result.source() + ":" + result.content();
     }
 
     private List<SearchResult> expandBestContext(List<SearchResult> ranked, int topK) {
