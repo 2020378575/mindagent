@@ -12,7 +12,11 @@ services:
       SPRING_PROFILES_ACTIVE: mysql
       DB_URL: jdbc:mysql://mysql:3306/evidencelab?useUnicode=true&characterEncoding=utf8&useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
       DB_USERNAME: evidencelab
-      DB_PASSWORD: evidencelab
+      DB_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      BOOTSTRAP_ADMIN_USERNAME: ${BOOTSTRAP_ADMIN_USERNAME:-}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-}
+      BOOTSTRAP_USER_USERNAME: ${BOOTSTRAP_USER_USERNAME:-}
+      BOOTSTRAP_USER_PASSWORD: ${BOOTSTRAP_USER_PASSWORD:-}
       REDIS_HOST: redis
       REDIS_PORT: 6379
       AI_PROVIDER: ${AI_PROVIDER:-openai}
@@ -41,10 +45,10 @@ services:
     environment:
       MYSQL_DATABASE: evidencelab
       MYSQL_USER: evidencelab
-      MYSQL_PASSWORD: evidencelab
-      MYSQL_ROOT_PASSWORD: root
+      MYSQL_PASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?Set MYSQL_ROOT_PASSWORD}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"
     volumes:
       - mysql-data:/var/lib/mysql
 
@@ -53,7 +57,7 @@ services:
     container_name: evidencelab-redis
     command: redis-server --appendonly yes
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis-data:/data
 
@@ -61,7 +65,7 @@ services:
     image: chromadb/chroma:latest
     container_name: evidencelab-chroma
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     volumes:
       - chroma-data:/chroma/chroma
 
@@ -69,8 +73,8 @@ services:
     image: axllent/mailpit:latest
     container_name: evidencelab-mailpit
     ports:
-      - "1025:1025"
-      - "8025:8025"
+      - "127.0.0.1:1025:1025"
+      - "127.0.0.1:8025:8025"
 
 volumes:
   mysql-data:

@@ -89,4 +89,15 @@ class ProjectIsolationApiTests {
         assertThat(loaded.id()).isEqualTo(created.id());
         assertThat(loaded.name()).isEqualTo("Visible project");
     }
+
+    @Test
+    void mcpEndpointsRequireAdminAuthentication() {
+        webTestClient.get().uri("/sse").exchange().expectStatus().isUnauthorized();
+        webTestClient.get().uri("/sse")
+                .headers(headers -> headers.setBasicAuth("student", "student123"))
+                .exchange().expectStatus().isForbidden();
+        webTestClient.post().uri("/mcp/messages")
+                .bodyValue("{}")
+                .exchange().expectStatus().isUnauthorized();
+    }
 }

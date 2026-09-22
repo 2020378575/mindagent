@@ -15,44 +15,87 @@ import org.springframework.stereotype.Component;
 @Order(Ordered.HIGHEST_PRECEDENCE)
 public class DataInitializer implements ApplicationRunner {
 
+    private static final String ROLE_USER = "ROLE_USER";
+    private static final String ROLE_ADMIN = "ROLE_ADMIN";
+    private static final String LEGACY_ADMIN_USERNAME = "admin";
+    private static final String LEGACY_ADMIN_PASSWORD = "admin123";
+    private static final String LEGACY_USER_USERNAME = "student";
+    private static final String LEGACY_USER_PASSWORD = "student123";
+
     private final UserAccountRepository userAccountRepository;
     private final PasswordEncoder passwordEncoder;
     private final KnowledgeIngestionService knowledgeIngestionService;
+    private final MindBridgeProperties properties;
 
     public DataInitializer(
             UserAccountRepository userAccountRepository,
             PasswordEncoder passwordEncoder,
-            KnowledgeIngestionService knowledgeIngestionService
+            KnowledgeIngestionService knowledgeIngestionService,
+            MindBridgeProperties properties
     ) {
         this.userAccountRepository = userAccountRepository;
         this.passwordEncoder = passwordEncoder;
         this.knowledgeIngestionService = knowledgeIngestionService;
+        this.properties = properties;
     }
 
     @Override
     public void run(ApplicationArguments args) {
-        // 首次启动准备演示账号；内置知识库会按 source 补齐或刷新。
+        // 只有显式配置凭据才创建初始账号；内置知识库会按 source 补齐或刷新。
+        retireLegacyAccount(LEGACY_ADMIN_USERNAME, LEGACY_ADMIN_PASSWORD);
+        retireLegacyAccount(LEGACY_USER_USERNAME, LEGACY_USER_PASSWORD);
         seedUsers();
         knowledgeIngestionService.syncClasspathKnowledge();
     }
 
     private void seedUsers() {
-        if (userAccountRepository.count() > 0) {
+        MindBridgeProperties.Bootstrap bootstrap = properties.getBootstrap();
+        seedUser(bootstrap.getAdminUsername(), bootstrap.getAdminPassword(),
+                "Research Admin", Set.of(ROLE_ADMIN, ROLE_USER));
+        seedUser(bootstrap.getUserUsername(), bootstrap.getUserPassword(),
+                "Research User", Set.of(ROLE_USER));
+    }
+
+    private void seedUser(String username, String password, String displayName, Set<String> roles) {
+        boolean hasUsername = username != null && !username.isBlank();
+        boolean hasPassword = password != null && !password.isBlank();
+        if (!hasUsername && !hasPassword) {
             return;
         }
-        // 管理员账号用于后台查看，学生账号用于正常聊天体验。
-        UserAccount admin = new UserAccount();
-        admin.setUsername("admin");
-        admin.setDisplayName("Research Admin");
-        admin.setPassword(passwordEncoder.encode("admin123"));
-        admin.setRoles(Set.of("ROLE_ADMIN", "ROLE_USER"));
-        userAccountRepository.save(admin);
+        if (!hasUsername || !hasPassword) {
+            throw new IllegalStateException("Bootstrap username and password must both be configured");
+        }
+        String normalizedUsername = username.trim();
+        UserAccount existing = userAccountRepository.findByUsername(normalizedUsername).orElse(null);
+        if (existing != null) {
+            if (!existing.isEnabled() && isLegacyDemoPassword(existing)) {
+                existing.setPassword(passwordEncoder.encode(password));
+                existing.setEnabled(true);
+                userAccountRepository.save(existing);
+            }
+            return;
+        }
+        UserAccount user = new UserAccount();
+        user.setUsername(normalizedUsername);
+        user.setDisplayName(displayName);
+        user.setPassword(passwordEncoder.encode(password));
+        user.setRoles(roles);
+        userAccountRepository.save(user);
+    }
 
-        UserAccount student = new UserAccount();
-        student.setUsername("student");
-        student.setDisplayName("Demo Researcher");
-        student.setPassword(passwordEncoder.encode("student123"));
-        student.setRoles(Set.of("ROLE_USER"));
-        userAccountRepository.save(student);
+    private void retireLegacyAccount(String username, String legacyPassword) {
+        userAccountRepository.findByUsername(username).ifPresent(account -> {
+            if (account.isEnabled() && passwordEncoder.matches(legacyPassword, account.getPassword())) {
+                account.setEnabled(false);
+                userAccountRepository.save(account);
+            }
+        });
+    }
+
+    private boolean isLegacyDemoPassword(UserAccount account) {
+        return (LEGACY_ADMIN_USERNAME.equals(account.getUsername())
+                && passwordEncoder.matches(LEGACY_ADMIN_PASSWORD, account.getPassword()))
+                || (LEGACY_USER_USERNAME.equals(account.getUsername())
+                && passwordEncoder.matches(LEGACY_USER_PASSWORD, account.getPassword()));
     }
 }

@@ -7,7 +7,7 @@ spring:
   ai:
     mcp:
       server:
-        enabled: ${MCP_SERVER_ENABLED:true}
+        enabled: ${MCP_SERVER_ENABLED:false}
         name: evidencelab-mcp-server
         version: 0.1.0
         type: SYNC
@@ -45,7 +45,7 @@ spring:
       timeout: ${REDIS_TIMEOUT:2s}
   h2:
     console:
-      enabled: true
+      enabled: false
       path: /h2-console
   jpa:
     hibernate:
@@ -86,6 +86,11 @@ management:
         include: health,info
 
 mindbridge:
+  bootstrap:
+    admin-username: ${BOOTSTRAP_ADMIN_USERNAME:}
+    admin-password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+    user-username: ${BOOTSTRAP_USER_USERNAME:}
+    user-password: ${BOOTSTRAP_USER_PASSWORD:}
   ai:
     provider: ${AI_PROVIDER:openai}
     temperature: ${AI_TEMPERATURE:0.35}
@@ -144,3 +149,5 @@ mindbridge:
     stage-timeout: ${TASK_STAGE_TIMEOUT:60s}
     stale-running-after: ${TASK_STALE_RUNNING_AFTER:5m}
     max-attempts: ${TASK_MAX_ATTEMPTS:2}
+    retry-initial-delay: ${TASK_RETRY_INITIAL_DELAY:1s}
+    recovery-interval: ${TASK_RECOVERY_INTERVAL:PT30S}

@@ -22,6 +22,7 @@ public class MindBridgeProperties {
     private final Mcp mcp = new Mcp();
     private final Research research = new Research();
     private final Task task = new Task();
+    private final Bootstrap bootstrap = new Bootstrap();
 
     public Ai getAi() {
         return ai;
@@ -57,6 +58,26 @@ public class MindBridgeProperties {
 
     public Task getTask() {
         return task;
+    }
+
+    public Bootstrap getBootstrap() {
+        return bootstrap;
+    }
+
+    public static class Bootstrap {
+        private String adminUsername = "";
+        private String adminPassword = "";
+        private String userUsername = "";
+        private String userPassword = "";
+
+        public String getAdminUsername() { return adminUsername; }
+        public void setAdminUsername(String adminUsername) { this.adminUsername = adminUsername; }
+        public String getAdminPassword() { return adminPassword; }
+        public void setAdminPassword(String adminPassword) { this.adminPassword = adminPassword; }
+        public String getUserUsername() { return userUsername; }
+        public void setUserUsername(String userUsername) { this.userUsername = userUsername; }
+        public String getUserPassword() { return userPassword; }
+        public void setUserPassword(String userPassword) { this.userPassword = userPassword; }
     }
 
     public static class Ai {
@@ -522,6 +543,8 @@ public class MindBridgeProperties {
         private java.time.Duration staleRunningAfter = java.time.Duration.ofMinutes(5);
         /** 含首次执行在内的最大尝试次数；瞬时失败可自动重试。 */
         private int maxAttempts = 2;
+        /** 瞬时失败的首次重试等待时间，后续按指数退避。 */
+        private java.time.Duration retryInitialDelay = java.time.Duration.ofSeconds(1);
 
         public int getWorkerCount() {
             return workerCount;
@@ -553,6 +576,14 @@ public class MindBridgeProperties {
 
         public void setMaxAttempts(int maxAttempts) {
             this.maxAttempts = maxAttempts;
+        }
+
+        public java.time.Duration getRetryInitialDelay() {
+            return retryInitialDelay;
+        }
+
+        public void setRetryInitialDelay(java.time.Duration retryInitialDelay) {
+            this.retryInitialDelay = retryInitialDelay;
         }
     }
 }
