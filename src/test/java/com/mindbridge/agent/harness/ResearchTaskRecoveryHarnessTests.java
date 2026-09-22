@@ -74,6 +74,7 @@ class ResearchTaskRecoveryHarnessTests {
         properties = new MindBridgeProperties();
         properties.getTask().setMaxAttempts(2);
         properties.getTask().setStaleRunningAfter(java.time.Duration.ofMinutes(5));
+        properties.getTask().setRetryInitialDelay(java.time.Duration.ZERO);
 
         ResearchProject project = project();
         lenient().when(projectService.requireOwnedProject(USER_ID, PROJECT_ID)).thenReturn(project);
@@ -147,7 +148,7 @@ class ResearchTaskRecoveryHarnessTests {
     }
 
     @Test
-    void restartedExecutorResumesAfterLastCheckpoint() {
+    void recoveryTickResumesAfterLastCheckpointWithoutRestart() {
         ResearchTask task = taskService.create(USER_ID, PROJECT_ID, new CreateResearchTaskRequest(
                 "decision-001", ResearchTaskType.DECISION, "LoRA or QLoRA?", null, null, null));
         Long taskId = task.getId();
@@ -171,18 +172,36 @@ class ResearchTaskRecoveryHarnessTests {
                 .contains(ResearchTaskStage.CRITIC);
 
         reset(decisionHandler);
-        when(decisionHandler.type()).thenReturn(ResearchTaskType.DECISION);
         when(decisionHandler.execute(any(), any()))
                 .thenReturn(new TaskExecutionResult(ResearchTaskStatus.SUCCEEDED, 99L));
 
-        ResearchTaskExecutor restartedExecutor = newExecutorUsingSameRepositories(decisionHandler);
-        restartedExecutor.resumeIncompleteTasks();
+        firstExecutor.recoverIncompleteTasks();
 
         assertThat(tasks.get(taskId).getStatus()).isEqualTo(ResearchTaskStatus.SUCCEEDED);
         assertThat(tasks.get(taskId).getResultReferenceId()).isEqualTo(99L);
         assertThat(checkpoints)
                 .extracting(ResearchTaskCheckpoint::getStage)
                 .contains(ResearchTaskStage.CRITIC);
+    }
+
+    @Test
+    void recoveryTickRespectsBackoffBeforeRetrying() {
+        properties.getTask().setRetryInitialDelay(java.time.Duration.ofHours(1));
+        ResearchTask task = taskService.create(USER_ID, PROJECT_ID, new CreateResearchTaskRequest(
+                "backoff-001", ResearchTaskType.DECISION, "Retry?", null, null, null));
+        when(decisionHandler.execute(any(), any())).thenThrow(new TransientTaskException("temporary"));
+        ResearchTaskExecutor executor = newExecutorUsingSameRepositories(decisionHandler);
+        executor.execute(task.getId());
+
+        reset(decisionHandler);
+        when(decisionHandler.execute(any(), any()))
+                .thenReturn(new TaskExecutionResult(ResearchTaskStatus.SUCCEEDED, 99L));
+        executor.recoverIncompleteTasks();
+        assertThat(tasks.get(task.getId()).getStatus()).isEqualTo(ResearchTaskStatus.PENDING);
+
+        properties.getTask().setRetryInitialDelay(java.time.Duration.ZERO);
+        executor.recoverIncompleteTasks();
+        assertThat(tasks.get(task.getId()).getStatus()).isEqualTo(ResearchTaskStatus.SUCCEEDED);
     }
 
     private ResearchTaskExecutor newExecutorUsingSameRepositories(ResearchTaskHandler handler) {

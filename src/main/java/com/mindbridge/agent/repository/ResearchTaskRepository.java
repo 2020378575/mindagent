@@ -5,6 +5,7 @@ import com.mindbridge.agent.domain.ResearchTaskStatus;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Collection;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -56,4 +57,13 @@ public interface ResearchTaskRepository extends JpaRepository<ResearchTask, Long
                and t.updatedAt < :staleBefore
             """)
     int resetStaleRunningTasks(@Param("staleBefore") Instant staleBefore, @Param("now") Instant now);
+
+    @Modifying(clearAutomatically = true, flushAutomatically = true)
+    @Query("""
+            update ResearchTask t
+               set t.updatedAt = :now
+             where t.id in :taskIds
+               and t.status = com.mindbridge.agent.domain.ResearchTaskStatus.RUNNING
+            """)
+    int heartbeatRunningTasks(@Param("taskIds") Collection<Long> taskIds, @Param("now") Instant now);
 }

@@ -4,14 +4,17 @@ import com.mindbridge.agent.config.MindBridgeProperties;
 import com.mindbridge.agent.domain.ResearchTask;
 import com.mindbridge.agent.domain.ResearchTaskStatus;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.List;
-import java.util.Optional;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.core.task.TaskExecutor;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -21,13 +24,13 @@ import org.springframework.stereotype.Service;
 public class ResearchTaskExecutor {
 
     private static final Logger log = LoggerFactory.getLogger(ResearchTaskExecutor.class);
-    static final String TRANSIENT_ERROR_CODE = "TRANSIENT_FAILURE";
     static final String HANDLER_ERROR_CODE = "HANDLER_FAILURE";
 
     private final ResearchTaskService researchTaskService;
     private final ResearchTaskHandlerRegistry handlerRegistry;
     private final MindBridgeProperties properties;
     private final TaskExecutor taskExecutor;
+    private final Set<Long> activeTaskIds = ConcurrentHashMap.newKeySet();
 
     public ResearchTaskExecutor(
             ResearchTaskService researchTaskService,
@@ -49,6 +52,7 @@ public class ResearchTaskExecutor {
         if (!researchTaskService.claimPendingTask(taskId)) {
             return;
         }
+        activeTaskIds.add(taskId);
         try {
             researchTaskService.ensureActive(taskId);
             ResearchTask task = researchTaskService.getRequired(taskId);
@@ -64,22 +68,32 @@ public class ResearchTaskExecutor {
                     ? exception.getClass().getSimpleName()
                     : exception.getMessage();
             researchTaskService.markFailed(taskId, HANDLER_ERROR_CODE, message);
+        } finally {
+            activeTaskIds.remove(taskId);
         }
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void resumeIncompleteTasks() {
+        recoverIncompleteTasks();
+    }
+
+    @Scheduled(fixedDelayString = "${mindbridge.task.recovery-interval:PT30S}")
+    public void recoverIncompleteTasks() {
+        researchTaskService.heartbeatRunning(activeTaskIds);
         Instant staleBefore = Instant.now().minus(properties.getTask().getStaleRunningAfter());
         int reset = researchTaskService.resetStaleRunning(staleBefore);
         if (reset > 0) {
             log.info("Reset {} stale RUNNING research tasks to PENDING", reset);
         }
-        List<ResearchTask> pending = researchTaskService.findPending();
-        for (ResearchTask task : pending) {
+        List<ResearchTask> ready = researchTaskService.findPending().stream()
+                .filter(this::readyForRetry)
+                .toList();
+        for (ResearchTask task : ready) {
             submit(task.getId());
         }
-        if (!pending.isEmpty()) {
-            log.info("Resumed {} PENDING research tasks", pending.size());
+        if (!ready.isEmpty()) {
+            log.info("Resumed {} PENDING research tasks", ready.size());
         }
     }
 
@@ -103,11 +117,25 @@ public class ResearchTaskExecutor {
 
     private void handleTransient(Long taskId, TransientTaskException exception) {
         ResearchTask task = researchTaskService.getRequired(taskId);
+        if (task.getStatus() == ResearchTaskStatus.CANCELLED) {
+            return;
+        }
         int maxAttempts = Math.max(1, properties.getTask().getMaxAttempts());
         if (task.getAttemptCount() < maxAttempts) {
             researchTaskService.requeueAfterTransient(taskId, exception.getMessage());
             return;
         }
-        researchTaskService.markFailed(taskId, TRANSIENT_ERROR_CODE, exception.getMessage());
+        researchTaskService.markFailed(taskId, ResearchTaskService.TRANSIENT_ERROR_CODE, exception.getMessage());
+    }
+
+    private boolean readyForRetry(ResearchTask task) {
+        if (!ResearchTaskService.TRANSIENT_ERROR_CODE.equals(task.getErrorCode())) {
+            return true;
+        }
+        Duration initialDelay = properties.getTask().getRetryInitialDelay();
+        long initialMillis = Math.max(0, initialDelay.toMillis());
+        int exponent = Math.min(Math.max(0, task.getAttemptCount() - 1), 10);
+        long delayMillis = Math.min(30_000L, initialMillis * (1L << exponent));
+        return !task.getUpdatedAt().plusMillis(delayMillis).isAfter(Instant.now());
     }
 }

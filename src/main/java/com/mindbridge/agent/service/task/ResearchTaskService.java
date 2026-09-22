@@ -13,6 +13,7 @@ import com.mindbridge.agent.repository.ResearchTaskRepository;
 import com.mindbridge.agent.service.project.ResearchProjectService;
 import java.time.Instant;
 import java.util.List;
+import java.util.Collection;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
@@ -24,9 +25,10 @@ import org.springframework.transaction.annotation.Transactional;
  */
 public class ResearchTaskService {
 
-    static final String TASK_NOT_FOUND_MESSAGE = "Research task not found";
+    public static final String TASK_NOT_FOUND_MESSAGE = "Research task not found";
     static final String TASK_CANCELLED_MESSAGE = "Research task cancelled";
     static final String TASK_NOT_RETRYABLE_MESSAGE = "Research task cannot be retried";
+    static final String TRANSIENT_ERROR_CODE = "TRANSIENT_FAILURE";
     private static final int MAX_ERROR_MESSAGE = 500;
 
     private final ResearchProjectService researchProjectService;
@@ -125,6 +127,9 @@ public class ResearchTaskService {
     @Transactional
     public void markWaitingForConfirmation(Long taskId, Long resultReferenceId) {
         ResearchTask task = requiredTask(taskId);
+        if (task.getStatus() == ResearchTaskStatus.CANCELLED) {
+            return;
+        }
         task.setStatus(ResearchTaskStatus.WAITING_FOR_CONFIRMATION);
         task.setResultReferenceId(resultReferenceId);
         task.setProgressPercent(Math.max(task.getProgressPercent(), 90));
@@ -136,6 +141,9 @@ public class ResearchTaskService {
     @Transactional
     public void markSucceeded(Long taskId, Long resultReferenceId) {
         ResearchTask task = requiredTask(taskId);
+        if (task.getStatus() == ResearchTaskStatus.CANCELLED) {
+            return;
+        }
         task.setStatus(ResearchTaskStatus.SUCCEEDED);
         task.setResultReferenceId(resultReferenceId);
         task.setProgressPercent(100);
@@ -149,6 +157,9 @@ public class ResearchTaskService {
     @Transactional
     public void markFailed(Long taskId, String errorCode, String safeMessage) {
         ResearchTask task = requiredTask(taskId);
+        if (task.getStatus() == ResearchTaskStatus.CANCELLED) {
+            return;
+        }
         task.setStatus(ResearchTaskStatus.FAILED);
         task.setErrorCode(errorCode);
         task.setErrorMessage(trimMessage(safeMessage));
@@ -169,7 +180,10 @@ public class ResearchTaskService {
     @Transactional
     public ResearchTask requeueAfterTransient(Long taskId, String safeMessage) {
         ResearchTask task = requiredTask(taskId);
-        task.setErrorCode("TRANSIENT_FAILURE");
+        if (task.getStatus() == ResearchTaskStatus.CANCELLED) {
+            return task;
+        }
+        task.setErrorCode(TRANSIENT_ERROR_CODE);
         task.setErrorMessage(trimMessage(safeMessage));
         return requeue(task, "Transient failure, requeued");
     }
@@ -220,6 +234,13 @@ public class ResearchTaskService {
     @Transactional
     public int resetStaleRunning(Instant staleBefore) {
         return researchTaskRepository.resetStaleRunningTasks(staleBefore, Instant.now());
+    }
+
+    @Transactional
+    public void heartbeatRunning(Collection<Long> taskIds) {
+        if (!taskIds.isEmpty()) {
+            researchTaskRepository.heartbeatRunningTasks(taskIds, Instant.now());
+        }
     }
 
     @Transactional(readOnly = true)

@@ -97,6 +97,7 @@ class EvidenceLabAcceptanceTests {
         properties = new MindBridgeProperties();
         properties.getTask().setMaxAttempts(2);
         properties.getTask().setStaleRunningAfter(java.time.Duration.ofMinutes(5));
+        properties.getTask().setRetryInitialDelay(java.time.Duration.ZERO);
 
         ResearchProject project = project();
         lenient().when(projectService.requireOwnedProject(USER_ID, PROJECT_ID)).thenReturn(project);

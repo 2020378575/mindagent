@@ -99,7 +99,7 @@ public class DecisionService {
         ResearchProject project = researchProjectService.requireOwnedProject(userId, projectId);
         ResearchTask task = researchTaskService.getRequired(taskId);
         if (!projectId.equals(task.projectId()) || !userId.equals(task.ownerId())) {
-            throw new IllegalArgumentException("Research task not found");
+            throw new IllegalArgumentException(ResearchTaskService.TASK_NOT_FOUND_MESSAGE);
         }
         DecisionDraft draft = loadDraftFromTask(taskId);
         DecisionValidationResult validation = validationService.validate(userId, projectId, taskId, draft);
@@ -183,7 +183,7 @@ public class DecisionService {
         ResearchProject project = researchProjectService.requireOwnedProject(userId, projectId);
         ResearchTask task = researchTaskService.getRequired(taskId);
         if (!projectId.equals(task.projectId()) || !userId.equals(task.ownerId())) {
-            throw new IllegalArgumentException("Research task not found");
+            throw new IllegalArgumentException(ResearchTaskService.TASK_NOT_FOUND_MESSAGE);
         }
         DecisionDraft draft = loadDraftFromTask(taskId);
         DecisionValidationResult validation = validationService.validate(userId, projectId, taskId, draft);

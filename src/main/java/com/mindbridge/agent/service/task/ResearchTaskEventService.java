@@ -22,8 +22,12 @@ public class ResearchTaskEventService {
     public void publish(ResearchTaskEvent event) {
         Sinks.Many<ResearchTaskEvent> sink = sinks.computeIfAbsent(
                 event.taskPublicId(),
-                key -> Sinks.many().multicast().onBackpressureBuffer());
+                key -> Sinks.many().replay().limit(1));
         sink.tryEmitNext(event);
+        if (isTerminal(event.status())) {
+            sink.tryEmitComplete();
+            sinks.remove(event.taskPublicId(), sink);
+        }
     }
 
     public Flux<ServerSentEvent<ResearchTaskEvent>> stream(
@@ -32,7 +36,7 @@ public class ResearchTaskEventService {
     ) {
         Sinks.Many<ResearchTaskEvent> sink = sinks.computeIfAbsent(
                 taskPublicId,
-                key -> Sinks.many().multicast().onBackpressureBuffer());
+                key -> Sinks.many().replay().limit(1));
         Flux<ResearchTaskEvent> live = sink.asFlux()
                 .filter(event -> taskPublicId.equals(event.taskPublicId()));
         return Flux.concat(Flux.fromIterable(history), live)
@@ -46,5 +50,9 @@ public class ResearchTaskEventService {
                 || status == ResearchTaskStatus.FAILED
                 || status == ResearchTaskStatus.CANCELLED
                 || status == ResearchTaskStatus.WAITING_FOR_CONFIRMATION;
+    }
+
+    int activeSinkCount() {
+        return sinks.size();
     }
 }
