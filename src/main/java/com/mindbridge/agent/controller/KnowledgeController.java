@@ -33,10 +33,12 @@ public class KnowledgeController {
     }
 
     @PostMapping
-    public KnowledgeIngestResponse ingest(@Valid @RequestBody KnowledgeIngestRequest request) {
+    public Mono<KnowledgeIngestResponse> ingest(@Valid @RequestBody KnowledgeIngestRequest request) {
         // JSON 接口适合脚本或调试时直接写入一段知识。
-        int chunks = knowledgeService.ingest(request.source(), request.content());
-        return new KnowledgeIngestResponse(request.source(), chunks);
+        return BlockingRequests.supply(() -> {
+            int chunks = knowledgeService.ingest(request.source(), request.content());
+            return new KnowledgeIngestResponse(request.source(), chunks);
+        });
     }
 
     @PostMapping(value = "/file", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

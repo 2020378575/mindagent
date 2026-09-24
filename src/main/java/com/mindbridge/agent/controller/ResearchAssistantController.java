@@ -27,6 +27,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(ResearchAssistantController.PATH)
@@ -61,26 +62,28 @@ public class ResearchAssistantController {
     }
 
     @PostMapping("/decision-tasks")
-    public ResearchTaskResponse createDecisionTask(
+    public Mono<ResearchTaskResponse> createDecisionTask(
             @AuthenticationPrincipal CurrentUser currentUser,
             @Valid @RequestBody CreateDecisionTaskRequest request
     ) {
         rejectAdmin(currentUser);
-        CreateResearchTaskRequest taskRequest = new CreateResearchTaskRequest(
-                request.idempotencyKey() == null || request.idempotencyKey().isBlank()
-                        ? UUID.randomUUID().toString()
-                        : request.idempotencyKey().trim(),
-                ResearchTaskType.DECISION,
-                request.question(),
-                null,
-                null,
-                null);
-        ResearchTask task = owned(() ->
-                researchTaskService.create(currentUser.getId(), request.projectId(), taskRequest));
-        if (task.getStatus() == ResearchTaskStatus.PENDING && task.getAttemptCount() == 0) {
-            researchTaskExecutor.submit(task.getId());
-        }
-        return ResearchTaskResponse.from(task);
+        return BlockingRequests.supply(() -> {
+            CreateResearchTaskRequest taskRequest = new CreateResearchTaskRequest(
+                    request.idempotencyKey() == null || request.idempotencyKey().isBlank()
+                            ? UUID.randomUUID().toString()
+                            : request.idempotencyKey().trim(),
+                    ResearchTaskType.DECISION,
+                    request.question(),
+                    null,
+                    null,
+                    null);
+            ResearchTask task = owned(() ->
+                    researchTaskService.create(currentUser.getId(), request.projectId(), taskRequest));
+            if (task.getStatus() == ResearchTaskStatus.PENDING && task.getAttemptCount() == 0) {
+                researchTaskExecutor.submit(task.getId());
+            }
+            return ResearchTaskResponse.from(task);
+        });
     }
 
     private void rejectAdmin(CurrentUser currentUser) {

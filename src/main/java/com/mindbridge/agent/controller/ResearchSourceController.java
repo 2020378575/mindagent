@@ -94,13 +94,13 @@ public class ResearchSourceController {
     }
 
     @GetMapping
-    public List<ResearchSourceResponse> list(
+    public Mono<List<ResearchSourceResponse>> list(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId
     ) {
-        return owned(() -> researchSourceService.list(currentUser.getId(), projectId)).stream()
+        return BlockingRequests.supply(() -> owned(() -> researchSourceService.list(currentUser.getId(), projectId)).stream()
                 .map(ResearchSourceResponse::from)
-                .toList();
+                .toList());
     }
 
     private String contentType(FilePart file) {

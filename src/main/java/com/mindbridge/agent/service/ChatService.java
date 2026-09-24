@@ -101,12 +101,13 @@ public class ChatService {
         String modelInput = privacySanitizer.sanitize(input);
         UserAccount user = userAccountRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        ChatSession session = resolveSession(user, request.sessionId(), input);
+        ChatSession session = resolveSession(user, request.sessionId(), request.projectId(), input);
         Instant startedAt = Instant.now();
+        Long projectId = session.getProject() == null ? null : session.getProject().getId();
         AgentContext context = new AgentContext(
                 null,
                 user.getId(),
-                session.getProject() == null ? null : session.getProject().getId(),
+                projectId,
                 input,
                 modelInput);
         AgentRunResult agentRun = agentRuntimeService.run(context);
@@ -148,20 +149,30 @@ public class ChatService {
         return meta.concatWith(tokens).concatWith(done);
     }
 
-    private ChatSession resolveSession(UserAccount user, String publicId, String input) {
+    private ChatSession resolveSession(UserAccount user, String publicId, Long projectId, String input) {
+        ResearchProject project = resolveProject(user, projectId);
         if (publicId != null && !publicId.isBlank()) {
-            return chatSessionRepository.findByPublicIdAndUser_Id(publicId, user.getId())
+            ChatSession existing = chatSessionRepository.findByPublicIdAndUser_Id(publicId, user.getId())
                     .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+            if (project != null
+                    && (existing.getProject() == null || !project.getId().equals(existing.getProject().getId()))) {
+                existing.setProject(project);
+                return chatSessionRepository.save(existing);
+            }
+            return existing;
         }
         ChatSession session = new ChatSession();
         session.setPublicId(UUID.randomUUID().toString().replace("-", ""));
         session.setUser(user);
-        session.setProject(resolveProject(user));
+        session.setProject(project);
         session.setTitle(input.length() > 36 ? input.substring(0, 36) : input);
         return chatSessionRepository.save(session);
     }
 
-    private ResearchProject resolveProject(UserAccount user) {
+    private ResearchProject resolveProject(UserAccount user, Long projectId) {
+        if (projectId != null) {
+            return researchProjectService.requireOwnedProject(user.getId(), projectId);
+        }
         return researchProjectService.list(user.getId()).stream()
                 .filter(project -> project.getStatus() == ProjectStatus.ACTIVE)
                 .findFirst()

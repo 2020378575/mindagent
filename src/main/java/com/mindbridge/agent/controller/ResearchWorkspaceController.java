@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(ResearchWorkspaceController.PATH)
@@ -28,11 +29,12 @@ public class ResearchWorkspaceController {
     }
 
     @GetMapping
-    public ResearchWorkspaceResponse load(
+    public Mono<ResearchWorkspaceResponse> load(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId
     ) {
-        return owned(() -> researchWorkspaceService.load(currentUser.getId(), projectId));
+        return BlockingRequests.supply(() -> owned(() ->
+                researchWorkspaceService.load(currentUser.getId(), projectId)));
     }
 
     private ResearchWorkspaceResponse owned(Supplier<ResearchWorkspaceResponse> action) {

@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/profile/memory")
@@ -25,17 +26,18 @@ public class UserMemoryController {
     }
 
     @GetMapping
-    public List<UserMemoryItemResponse> memories(@AuthenticationPrincipal CurrentUser currentUser) {
-        return userProfileMemoryService.memoriesForUser(currentUser.getId()).stream()
+    public Mono<List<UserMemoryItemResponse>> memories(@AuthenticationPrincipal CurrentUser currentUser) {
+        return BlockingRequests.supply(() -> userProfileMemoryService.memoriesForUser(currentUser.getId()).stream()
                 .map(UserMemoryItemResponse::from)
-                .toList();
+                .toList());
     }
 
     @DeleteMapping("/{memoryId}")
-    public void delete(
+    public Mono<Void> delete(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long memoryId
     ) {
-        userProfileMemoryService.deleteMemory(currentUser.getId(), memoryId);
+        return BlockingRequests.run(() ->
+                userProfileMemoryService.deleteMemory(currentUser.getId(), memoryId));
     }
 }

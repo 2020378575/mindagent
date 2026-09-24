@@ -15,6 +15,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api")
@@ -34,48 +35,48 @@ public class ReportController {
     }
 
     @GetMapping("/reports/me")
-    public List<ReportResponse> myReports(@AuthenticationPrincipal CurrentUser currentUser) {
-        return reportService.myReports(currentUser.getId()).stream()
+    public Mono<List<ReportResponse>> myReports(@AuthenticationPrincipal CurrentUser currentUser) {
+        return BlockingRequests.supply(() -> reportService.myReports(currentUser.getId()).stream()
                 .map(ReportResponse::from)
-                .toList();
+                .toList());
     }
 
     @GetMapping("/admin/reports")
-    public List<ReportResponse> latestReports() {
+    public Mono<List<ReportResponse>> latestReports() {
         // 管理员统计大屏使用这个接口作为对话报告主数据源。
-        return reportService.latestReports().stream()
+        return BlockingRequests.supply(() -> reportService.latestReports().stream()
                 .map(ReportResponse::from)
-                .toList();
+                .toList());
     }
 
     @GetMapping("/admin/excel-records")
-    public List<ExcelRecordResponse> excelRecords() {
-        return reportService.excelRecords();
+    public Mono<List<ExcelRecordResponse>> excelRecords() {
+        return BlockingRequests.supply(reportService::excelRecords);
     }
 
     @GetMapping("/admin/alerts")
-    public List<AlertRecordResponse> alertRecords() {
-        return reportService.alertRecords();
+    public Mono<List<AlertRecordResponse>> alertRecords() {
+        return BlockingRequests.supply(reportService::alertRecords);
     }
 
     @GetMapping("/admin/conversations/{sessionId}")
-    public ConversationResponse conversation(@PathVariable String sessionId) {
+    public Mono<ConversationResponse> conversation(@PathVariable String sessionId) {
         // 点开任一后台记录时读取完整会话，便于管理员回看上下文。
-        return reportService.conversation(sessionId);
+        return BlockingRequests.supply(() -> reportService.conversation(sessionId));
     }
 
     @GetMapping("/admin/conversations/{sessionId}/run-traces")
-    public List<AgentRunTraceResponse> conversationRunTraces(@PathVariable String sessionId) {
-        return agentRunTraceService.tracesForSession(sessionId);
+    public Mono<List<AgentRunTraceResponse>> conversationRunTraces(@PathVariable String sessionId) {
+        return BlockingRequests.supply(() -> agentRunTraceService.tracesForSession(sessionId));
     }
 
     @GetMapping("/admin/run-traces")
-    public List<AgentRunTraceSummaryResponse> latestRunTraces() {
-        return agentRunTraceService.latestTraces();
+    public Mono<List<AgentRunTraceSummaryResponse>> latestRunTraces() {
+        return BlockingRequests.supply(agentRunTraceService::latestTraces);
     }
 
     @GetMapping("/admin/run-traces/{traceId}")
-    public AgentRunTraceResponse runTrace(@PathVariable String traceId) {
-        return agentRunTraceService.trace(traceId);
+    public Mono<AgentRunTraceResponse> runTrace(@PathVariable String traceId) {
+        return BlockingRequests.supply(() -> agentRunTraceService.trace(traceId));
     }
 }

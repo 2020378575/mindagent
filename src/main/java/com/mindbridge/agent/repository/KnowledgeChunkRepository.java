@@ -11,6 +11,9 @@ public interface KnowledgeChunkRepository extends JpaRepository<KnowledgeChunk, 
 
     List<KnowledgeChunk> findByProject_Id(Long projectId);
 
+    /** 内置/管理员全局知识块（project_id 为空），可被任意项目检索合并。 */
+    List<KnowledgeChunk> findByProjectIsNull();
+
     List<KnowledgeChunk> findByResearchSource_IdOrderBySourceIndexAsc(Long sourceId);
 
     List<KnowledgeChunk> findByResearchSource_IdAndSourceIndexBetweenOrderBySourceIndexAsc(

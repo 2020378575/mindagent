@@ -25,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(ResearchTaskController.TASKS_PATH)
@@ -54,37 +55,39 @@ public class ResearchTaskController {
     }
 
     @GetMapping
-    public List<ResearchTaskResponse> list(
+    public Mono<List<ResearchTaskResponse>> list(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId
     ) {
-        return ownedList(() -> researchTaskService.list(currentUser.getId(), projectId)).stream()
+        return BlockingRequests.supply(() -> ownedList(() -> researchTaskService.list(currentUser.getId(), projectId)).stream()
                 .map(ResearchTaskResponse::from)
-                .toList();
+                .toList());
     }
 
     @PostMapping
-    public ResearchTaskResponse create(
+    public Mono<ResearchTaskResponse> create(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @Valid @RequestBody CreateResearchTaskRequest request
     ) {
-        ResearchTask task = owned(() -> researchTaskService.create(currentUser.getId(), projectId, request));
-        if (task.getStatus() == com.mindbridge.agent.domain.ResearchTaskStatus.PENDING
-                && task.getAttemptCount() == 0) {
-            researchTaskExecutor.submit(task.getId());
-        }
-        return ResearchTaskResponse.from(task);
+        return BlockingRequests.supply(() -> {
+            ResearchTask task = owned(() -> researchTaskService.create(currentUser.getId(), projectId, request));
+            if (task.getStatus() == com.mindbridge.agent.domain.ResearchTaskStatus.PENDING
+                    && task.getAttemptCount() == 0) {
+                researchTaskExecutor.submit(task.getId());
+            }
+            return ResearchTaskResponse.from(task);
+        });
     }
 
     @GetMapping(TASK_PUBLIC_ID)
-    public ResearchTaskResponse get(
+    public Mono<ResearchTaskResponse> get(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable String taskPublicId
     ) {
-        return ResearchTaskResponse.from(owned(() ->
-                researchTaskService.requireOwnedTask(currentUser.getId(), projectId, taskPublicId)));
+        return BlockingRequests.supply(() -> ResearchTaskResponse.from(owned(() ->
+                researchTaskService.requireOwnedTask(currentUser.getId(), projectId, taskPublicId))));
     }
 
     @GetMapping(value = EVENTS_PATH, produces = MediaType.TEXT_EVENT_STREAM_VALUE)
@@ -93,31 +96,33 @@ public class ResearchTaskController {
             @PathVariable Long projectId,
             @PathVariable String taskPublicId
     ) {
-        ResearchTask task = owned(() ->
-                researchTaskService.requireOwnedTask(currentUser.getId(), projectId, taskPublicId));
-        return researchTaskEventService.stream(taskPublicId, history(task));
+        return BlockingRequests.supply(() ->
+                        owned(() -> researchTaskService.requireOwnedTask(currentUser.getId(), projectId, taskPublicId)))
+                .flatMapMany(task -> researchTaskEventService.stream(task.getPublicId(), history(task)));
     }
 
     @PostMapping(RETRY_PATH)
-    public ResearchTaskResponse retry(
+    public Mono<ResearchTaskResponse> retry(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable String taskPublicId
     ) {
-        ResearchTask task = owned(() ->
-                researchTaskService.retry(currentUser.getId(), projectId, taskPublicId));
-        researchTaskExecutor.submit(task.getId());
-        return ResearchTaskResponse.from(task);
+        return BlockingRequests.supply(() -> {
+            ResearchTask task = owned(() ->
+                    researchTaskService.retry(currentUser.getId(), projectId, taskPublicId));
+            researchTaskExecutor.submit(task.getId());
+            return ResearchTaskResponse.from(task);
+        });
     }
 
     @PostMapping(CANCEL_PATH)
-    public ResearchTaskResponse cancel(
+    public Mono<ResearchTaskResponse> cancel(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId,
             @PathVariable String taskPublicId
     ) {
-        return ResearchTaskResponse.from(owned(() ->
-                researchTaskService.cancel(currentUser.getId(), projectId, taskPublicId)));
+        return BlockingRequests.supply(() -> ResearchTaskResponse.from(owned(() ->
+                researchTaskService.cancel(currentUser.getId(), projectId, taskPublicId))));
     }
 
     private List<ResearchTaskEvent> history(ResearchTask task) {

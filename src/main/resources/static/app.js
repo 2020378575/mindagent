@@ -43,10 +43,18 @@
     decisionFromTask: (projectId, taskId) => `/api/projects/${projectId}/decisions/from-task/${taskId}`,
     confirmDecision: (projectId, decisionId) => `/api/projects/${projectId}/decisions/${decisionId}/confirm`,
     discardDecision: (projectId, decisionId) => `/api/projects/${projectId}/decisions/${decisionId}/discard`,
+    confirmReview: (projectId, decisionId, reviewTaskId) =>
+      `/api/projects/${projectId}/decisions/${decisionId}/reviews/${reviewTaskId}`,
     experiments: (projectId) => `/api/projects/${projectId}/experiments`,
     completeExperiment: (projectId, experimentId) => `/api/projects/${projectId}/experiments/${experimentId}/complete`,
     assistantStream: "/api/research/assistant/stream",
     assistantDecision: "/api/research/assistant/decision-tasks"
+  });
+
+  const TASK_TYPE = Object.freeze({
+    DECISION: "DECISION",
+    RESULT_REVIEW: "RESULT_REVIEW",
+    SOURCE_INGESTION: "SOURCE_INGESTION"
   });
 
   const MESSAGES = Object.freeze({
@@ -72,7 +80,8 @@
     projectId: null,
     workspace: null,
     view: VIEW_OVERVIEW,
-    loading: false
+    loading: false,
+    assistantSessionId: null
   };
 
   const el = (id) => document.getElementById(id);
@@ -172,6 +181,7 @@
     state.roleLabel = null;
     state.projectId = null;
     state.workspace = null;
+    state.assistantSessionId = null;
     state.view = VIEW_OVERVIEW;
     clearLegacySession();
     document.body.classList.add(AUTH_CLASSES.guest);
@@ -213,7 +223,11 @@
   }
 
   async function selectProject(projectId) {
-    state.projectId = Number(projectId);
+    const nextId = Number(projectId);
+    if (state.projectId !== nextId) {
+      state.assistantSessionId = null;
+    }
+    state.projectId = nextId;
     el(DOM_ID.projectPicker).hidden = true;
     el(DOM_ID.workspaceRoot).hidden = false;
     el(DOM_ID.backToProjects).hidden = false;
@@ -374,11 +388,17 @@
           confirmText: "提交结果"
         });
         if (!resultSummary) return;
-        await api(ENDPOINTS.completeExperiment(state.projectId, button.dataset.complete), {
-          method: POST_METHOD,
-          body: JSON.stringify({ resultSummary, metricsJson: "{}" })
-        });
-        await refreshWorkspace();
+        try {
+          await api(ENDPOINTS.completeExperiment(state.projectId, button.dataset.complete), {
+            method: POST_METHOD,
+            body: JSON.stringify({ resultSummary, metricsJson: "{}" })
+          });
+          showBanner("实验结果已提交，已自动创建结果复核任务，请到 Agent 轨迹查看。");
+          switchView(VIEW_TASKS);
+          await refreshWorkspace();
+        } catch (error) {
+          showBanner(error.message || MESSAGES.error, true);
+        }
       };
     });
   }
@@ -405,25 +425,60 @@
       root.innerHTML = `<p class="muted">${MESSAGES.emptyTasks}</p>`;
       return;
     }
-    root.innerHTML = tasks.map((task) => `
+    root.innerHTML = tasks.map((task) => {
+      let action = "";
+      if (task.status === TASK_STATUS.WAITING_FOR_CONFIRMATION && task.type === TASK_TYPE.DECISION) {
+        action = `<button type="button" class="btn btn-primary" data-draft="${task.id}">生成决策草稿</button>`;
+      } else if (task.status === TASK_STATUS.WAITING_FOR_CONFIRMATION && task.type === TASK_TYPE.RESULT_REVIEW) {
+        const decisionId = task.decisionId || state.workspace?.activeDecision?.id;
+        if (decisionId) {
+          action = `<button type="button" class="btn btn-primary" data-review-decision="${decisionId}" data-review-task="${task.id}">确认复核结论</button>`;
+        }
+      } else if (task.status === TASK_STATUS.FAILED) {
+        action = `<button type="button" class="btn btn-ghost" data-retry="${task.publicId}">重试</button>`;
+      }
+      return `
       <article class="list-row">
         <h4>${escapeHtml(task.type)} · ${escapeHtml(task.status)}</h4>
         <p class="muted">${escapeHtml(task.publicId)} · ${task.progressPercent || 0}%</p>
         <p>${escapeHtml(task.question || task.errorMessage || "")}</p>
-        ${task.status === TASK_STATUS.WAITING_FOR_CONFIRMATION ? `<button type="button" class="btn btn-primary" data-draft="${task.id}">生成决策草稿</button>` : ""}
-        ${task.status === TASK_STATUS.FAILED ? `<button type="button" class="btn btn-ghost" data-retry="${task.publicId}">重试</button>` : ""}
-      </article>
-    `).join("");
+        ${action}
+      </article>`;
+    }).join("");
     root.querySelectorAll("[data-draft]").forEach((button) => {
       button.onclick = async () => {
-        await api(ENDPOINTS.decisionFromTask(state.projectId, button.dataset.draft), { method: POST_METHOD });
-        await refreshWorkspace();
+        try {
+          await api(ENDPOINTS.decisionFromTask(state.projectId, button.dataset.draft), { method: POST_METHOD });
+          showBanner("已生成决策草稿，请到决策账本确认。");
+          await refreshWorkspace();
+        } catch (error) {
+          showBanner(error.message || MESSAGES.error, true);
+        }
+      };
+    });
+    root.querySelectorAll("[data-review-task]").forEach((button) => {
+      button.onclick = async () => {
+        try {
+          await api(ENDPOINTS.confirmReview(
+            state.projectId,
+            button.dataset.reviewDecision,
+            button.dataset.reviewTask
+          ), { method: POST_METHOD });
+          showBanner("复核已确认，决策进入 REVIEWED。");
+          await refreshWorkspace();
+        } catch (error) {
+          showBanner(error.message || MESSAGES.error, true);
+        }
       };
     });
     root.querySelectorAll("[data-retry]").forEach((button) => {
       button.onclick = async () => {
-        await api(ENDPOINTS.taskRetry(state.projectId, button.dataset.retry), { method: POST_METHOD });
-        await refreshWorkspace();
+        try {
+          await api(ENDPOINTS.taskRetry(state.projectId, button.dataset.retry), { method: POST_METHOD });
+          await refreshWorkspace();
+        } catch (error) {
+          showBanner(error.message || MESSAGES.error, true);
+        }
       };
     });
   }
@@ -583,7 +638,11 @@
         "Content-Type": "application/json",
         Accept: "text/event-stream"
       },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({
+        message,
+        projectId: state.projectId,
+        sessionId: state.assistantSessionId
+      })
     });
     if (!response.ok || !response.body) {
       botBubble.textContent = MESSAGES.error;
@@ -603,7 +662,13 @@
         if (!dataLine) return;
         try {
           const payload = JSON.parse(dataLine.slice(5).trim());
+          if (payload.type === "meta" && payload.sessionId) {
+            state.assistantSessionId = payload.sessionId;
+          }
           if (payload.type === "token" && payload.content) botBubble.textContent += payload.content;
+          if (payload.type === "error" && payload.content) {
+            botBubble.textContent = payload.content;
+          }
         } catch (_) { /* ignore partial */ }
       });
     }

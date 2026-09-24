@@ -22,7 +22,7 @@ import org.springframework.stereotype.Service;
 
 @Service
 /**
- * 项目级混合检索。只在当前 projectId 的切块上做向量、BM25、重排和相邻片段扩展。
+ * 项目级混合检索。合并当前 projectId 切块与 project_id 为空的内置/全局知识。
  */
 public class ProjectKnowledgeService {
 
@@ -119,13 +119,17 @@ public class ProjectKnowledgeService {
         List<KnowledgeChunk> projectChunks = index.chunks();
         List<SearchResult> vector = vectorCandidates(projectId, query, candidateLimit(topK), projectChunks);
         List<SearchResult> keyword = bm25Scorer.rank(query, index, candidateLimit(topK)).stream()
-                .filter(result -> projectId.equals(result.projectId()))
+                .filter(result -> visibleToProject(projectId, result.projectId()))
                 .toList();
         return expandBestContext(
                 projectId,
                 knowledgeReranker.rerank(query, merge(projectId, vector, keyword), topK),
                 topK
         );
+    }
+
+    private boolean visibleToProject(Long projectId, Long chunkProjectId) {
+        return chunkProjectId == null || projectId.equals(chunkProjectId);
     }
 
     private Bm25Scorer.Index corpus(Long projectId) {
@@ -141,7 +145,9 @@ public class ProjectKnowledgeService {
             }
             cachedCorpora.remove(projectId);
             cachedCorpora.entrySet().removeIf(entry -> !now.isBefore(entry.getValue().expiresAt()));
-            Bm25Scorer.Index index = bm25Scorer.index(knowledgeChunkRepository.findByProject_Id(projectId));
+            List<KnowledgeChunk> chunks = new ArrayList<>(knowledgeChunkRepository.findByProject_Id(projectId));
+            chunks.addAll(knowledgeChunkRepository.findByProjectIsNull());
+            Bm25Scorer.Index index = bm25Scorer.index(chunks);
             if (index.chunks().size() <= MAX_CACHED_CHUNKS) {
                 if (cachedCorpora.size() >= MAX_CACHED_PROJECTS) {
                     cachedCorpora.clear();
@@ -162,7 +168,7 @@ public class ProjectKnowledgeService {
             List<KnowledgeChunk> projectChunks
     ) {
         List<SearchResult> chromaResults = chromaGateway.query(projectId, query, limit).stream()
-                .filter(result -> projectId.equals(result.projectId()))
+                .filter(result -> visibleToProject(projectId, result.projectId()))
                 .toList();
         if (!chromaResults.isEmpty()) {
             return chromaResults;
@@ -176,7 +182,7 @@ public class ProjectKnowledgeService {
                         chunk,
                         cosine(queryEmbedding, parseEmbedding(chunk.getEmbeddingJson()))))
                 .filter(result -> result.score() > 0.0)
-                .filter(result -> projectId.equals(result.projectId()))
+                .filter(result -> visibleToProject(projectId, result.projectId()))
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
                 .limit(limit)
                 .toList();
@@ -191,7 +197,7 @@ public class ProjectKnowledgeService {
         int limit = Math.max(1, Math.max(vectorResults.size(), bm25Results.size()));
         return candidates.values().stream()
                 .map(HybridCandidate::toSearchResult)
-                .filter(result -> projectId.equals(result.projectId()))
+                .filter(result -> visibleToProject(projectId, result.projectId()))
                 .sorted(Comparator.comparingDouble(SearchResult::score).reversed())
                 .limit(limit)
                 .toList();
@@ -231,7 +237,7 @@ public class ProjectKnowledgeService {
 
     private List<SearchResult> expandBestContext(Long projectId, List<SearchResult> ranked, int topK) {
         List<SearchResult> owned = ranked.stream()
-                .filter(result -> projectId.equals(result.projectId()))
+                .filter(result -> visibleToProject(projectId, result.projectId()))
                 .toList();
         if (owned.isEmpty()) {
             return List.of();
@@ -249,20 +255,31 @@ public class ProjectKnowledgeService {
     }
 
     private SearchResult expand(Long projectId, SearchResult result) {
-        if (result.chunkId() == null || result.sourceId() == null) {
+        if (result.chunkId() == null) {
             return result;
         }
         return knowledgeChunkRepository.findById(result.chunkId())
-                .filter(chunk -> projectId.equals(chunk.projectId()))
+                .filter(chunk -> visibleToProject(projectId, chunk.projectId()))
                 .map(chunk -> {
-                    List<KnowledgeChunk> neighbors = knowledgeChunkRepository
-                            .findByResearchSource_IdAndSourceIndexBetweenOrderBySourceIndexAsc(
-                                    chunk.sourceId(),
-                                    Math.max(0, chunk.getSourceIndex() - 1),
-                                    chunk.getSourceIndex() + 1)
-                            .stream()
-                            .filter(neighbor -> projectId.equals(neighbor.projectId()))
-                            .toList();
+                    List<KnowledgeChunk> neighbors;
+                    if (chunk.sourceId() != null) {
+                        neighbors = knowledgeChunkRepository
+                                .findByResearchSource_IdAndSourceIndexBetweenOrderBySourceIndexAsc(
+                                        chunk.sourceId(),
+                                        Math.max(0, chunk.getSourceIndex() - 1),
+                                        chunk.getSourceIndex() + 1)
+                                .stream()
+                                .filter(neighbor -> visibleToProject(projectId, neighbor.projectId()))
+                                .toList();
+                    } else if (chunk.getSource() != null) {
+                        neighbors = knowledgeChunkRepository
+                                .findBySourceAndSourceIndexBetweenOrderBySourceIndexAsc(
+                                        chunk.getSource(),
+                                        Math.max(0, chunk.getSourceIndex() - 1),
+                                        chunk.getSourceIndex() + 1);
+                    } else {
+                        neighbors = List.of();
+                    }
                     if (neighbors.isEmpty()) {
                         return SearchResult.fromChunk(chunk, result.score());
                     }

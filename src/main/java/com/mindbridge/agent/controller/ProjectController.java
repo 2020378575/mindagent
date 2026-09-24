@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping(ProjectController.PROJECTS_PATH)
@@ -34,36 +35,37 @@ public class ProjectController {
     }
 
     @PostMapping
-    public ResearchProjectResponse create(
+    public Mono<ResearchProjectResponse> create(
             @AuthenticationPrincipal CurrentUser currentUser,
             @Valid @RequestBody CreateResearchProjectRequest request
     ) {
-        return ResearchProjectResponse.from(researchProjectService.create(currentUser.getId(), request));
+        return BlockingRequests.supply(() ->
+                ResearchProjectResponse.from(researchProjectService.create(currentUser.getId(), request)));
     }
 
     @GetMapping
-    public List<ResearchProjectResponse> list(@AuthenticationPrincipal CurrentUser currentUser) {
-        return researchProjectService.list(currentUser.getId()).stream()
+    public Mono<List<ResearchProjectResponse>> list(@AuthenticationPrincipal CurrentUser currentUser) {
+        return BlockingRequests.supply(() -> researchProjectService.list(currentUser.getId()).stream()
                 .map(ResearchProjectResponse::from)
-                .toList();
+                .toList());
     }
 
     @GetMapping("/{projectId}")
-    public ResearchProjectResponse get(
+    public Mono<ResearchProjectResponse> get(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId
     ) {
-        return ResearchProjectResponse.from(owned(() ->
-                researchProjectService.requireOwnedProject(currentUser.getId(), projectId)));
+        return BlockingRequests.supply(() -> ResearchProjectResponse.from(owned(() ->
+                researchProjectService.requireOwnedProject(currentUser.getId(), projectId))));
     }
 
     @PostMapping("/{projectId}/archive")
-    public ResearchProjectResponse archive(
+    public Mono<ResearchProjectResponse> archive(
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long projectId
     ) {
-        return ResearchProjectResponse.from(owned(() ->
-                researchProjectService.archive(currentUser.getId(), projectId)));
+        return BlockingRequests.supply(() -> ResearchProjectResponse.from(owned(() ->
+                researchProjectService.archive(currentUser.getId(), projectId))));
     }
 
     private ResearchProject owned(Supplier<ResearchProject> action) {
