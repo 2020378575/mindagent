@@ -41,6 +41,9 @@ public class DecisionAgent implements ResearchAgent {
     public AgentDecision act(AgentContext context) {
         DecisionDraft draft = draft(context);
         context.setDecisionDraft(draft);
+        if (context.intent() == IntentType.RESULT_REVIEW) {
+            context.setReviewVerdict(ReviewVerdicts.fromRecommendation(draft.recommendation()));
+        }
         String summary = """
                 推荐：%s
                 理由：%s

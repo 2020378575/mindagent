@@ -240,7 +240,8 @@ class DecisionExperimentLoopHarnessTests {
                 true,
                 true,
                 "query",
-                draft.recommendation());
+                draft.recommendation(),
+                null);
         ResearchTaskCheckpoint checkpoint = new ResearchTaskCheckpoint();
         checkpoint.setTask(task);
         checkpoint.setStepNumber(5);

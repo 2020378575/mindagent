@@ -66,7 +66,9 @@ public class ExperimentService {
     public ExperimentRun create(Long userId, Long projectId, CreateExperimentRequest request) {
         ResearchProject project = researchProjectService.requireOwnedProject(userId, projectId);
         DecisionRecord decision = decisionService.requireOwned(userId, projectId, request.decisionId());
-        if (decision.getStatus() != DecisionStatus.CONFIRMED && decision.getStatus() != DecisionStatus.VALIDATING) {
+        if (decision.getStatus() != DecisionStatus.CONFIRMED
+                && decision.getStatus() != DecisionStatus.VALIDATING
+                && decision.getStatus() != DecisionStatus.REVIEWED) {
             throw new IllegalStateException("Experiments can only be created for confirmed decisions");
         }
         ExperimentRun run = new ExperimentRun();
@@ -78,7 +80,7 @@ public class ExperimentService {
         run.setHypothesis(request.hypothesis());
         run.setSetupNotes(request.setupNotes());
         ExperimentRun saved = experimentRunRepository.save(run);
-        if (decision.getStatus() == DecisionStatus.CONFIRMED) {
+        if (decision.getStatus() == DecisionStatus.CONFIRMED || decision.getStatus() == DecisionStatus.REVIEWED) {
             decisionService.startValidation(userId, projectId, decision.getId(), saved.getId());
         }
         longTermMemoryService.rememberProjectEvent(projectId, new ResearchProjectEvent(
@@ -121,7 +123,9 @@ public class ExperimentService {
             return null;
         }
         DecisionRecord decision = decisionService.requireOwned(userId, projectId, experiment.getDecisionId());
-        if (decision.getStatus() != DecisionStatus.VALIDATING && decision.getStatus() != DecisionStatus.CONFIRMED) {
+        if (decision.getStatus() != DecisionStatus.VALIDATING
+                && decision.getStatus() != DecisionStatus.CONFIRMED
+                && decision.getStatus() != DecisionStatus.REVIEWED) {
             return null;
         }
         String question = "对照实验「%s」结果复核决策：%s。实验结果摘要：%s".formatted(

@@ -139,6 +139,7 @@ class ResearchAgentLoopHarnessTests {
                 false,
                 false,
                 "QLoRA VRAM",
+                null,
                 null));
         context.setResumeFromStep(4);
         context.setRetrievedEvidence(List.of(SearchResult.of(

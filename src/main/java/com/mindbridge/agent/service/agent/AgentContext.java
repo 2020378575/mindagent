@@ -2,6 +2,7 @@ package com.mindbridge.agent.service.agent;
 
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.ResearchTaskStage;
+import com.mindbridge.agent.domain.ReviewVerdict;
 import com.mindbridge.agent.service.ai.AiMessage;
 import com.mindbridge.agent.service.knowledge.SearchResult;
 import com.mindbridge.agent.service.memory.ResearchMemoryBundle;
@@ -26,6 +27,7 @@ public class AgentContext {
     private List<SearchResult> retrievedEvidence = List.of();
     private EvidenceCritique critique;
     private DecisionDraft decisionDraft;
+    private ReviewVerdict reviewVerdict;
     private List<AiMessage> responseMessages = List.of();
     private String knowledgeQuery;
     private String responsePlan = "回答当前研究问题。";
@@ -113,6 +115,14 @@ public class AgentContext {
 
     public void setDecisionDraft(DecisionDraft decisionDraft) {
         this.decisionDraft = decisionDraft;
+    }
+
+    public ReviewVerdict reviewVerdict() {
+        return reviewVerdict;
+    }
+
+    public void setReviewVerdict(ReviewVerdict reviewVerdict) {
+        this.reviewVerdict = reviewVerdict;
     }
 
     public List<AiMessage> responseMessages() {
@@ -272,7 +282,8 @@ public class AgentContext {
                 evidenceCritiqued,
                 responseCompleted,
                 knowledgeQuery,
-                assistantSummary
+                assistantSummary,
+                reviewVerdict
         );
     }
 
@@ -283,6 +294,7 @@ public class AgentContext {
         this.intent = checkpoint.intent();
         this.critique = checkpoint.critique();
         this.decisionDraft = checkpoint.decisionDraft();
+        this.reviewVerdict = checkpoint.reviewVerdict();
         this.knowledgeQuery = checkpoint.knowledgeQuery();
         this.contextLoaded = checkpoint.contextLoaded();
         this.intentRouted = checkpoint.intentRouted();

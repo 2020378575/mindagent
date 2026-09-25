@@ -7,6 +7,8 @@ import com.mindbridge.agent.domain.DecisionRecord;
 import com.mindbridge.agent.domain.DecisionStatus;
 import com.mindbridge.agent.domain.EvidenceStance;
 import com.mindbridge.agent.domain.ExperimentRun;
+import com.mindbridge.agent.domain.ResearchTask;
+import com.mindbridge.agent.domain.ResearchTaskType;
 import com.mindbridge.agent.dto.DecisionResponse;
 import com.mindbridge.agent.dto.ExperimentResponse;
 import com.mindbridge.agent.dto.ResearchProjectResponse;
@@ -16,6 +18,7 @@ import com.mindbridge.agent.dto.ResearchWorkspaceResponse;
 import com.mindbridge.agent.dto.WorkspaceActiveDecision;
 import com.mindbridge.agent.repository.DecisionEvidenceRepository;
 import com.mindbridge.agent.repository.ExperimentRunRepository;
+import com.mindbridge.agent.service.agent.AgentContextCheckpoint;
 import com.mindbridge.agent.service.decision.DecisionService;
 import com.mindbridge.agent.service.document.ResearchSourceService;
 import com.mindbridge.agent.service.experiment.ExperimentService;
@@ -79,9 +82,33 @@ public class ResearchWorkspaceService {
                 researchSourceService.list(userId, projectId).stream().map(ResearchSourceResponse::from).toList(),
                 researchTaskService.list(userId, projectId).stream()
                         .limit(20)
-                        .map(ResearchTaskResponse::from)
+                        .map(this::toTaskResponse)
                         .toList()
         );
+    }
+
+    private ResearchTaskResponse toTaskResponse(ResearchTask task) {
+        ResearchTaskResponse response = ResearchTaskResponse.from(task);
+        if (task.getType() != ResearchTaskType.RESULT_REVIEW) {
+            return response;
+        }
+        return researchTaskService.latestCheckpoint(task.getId())
+                .map(checkpoint -> reviewPreview(response, checkpoint.getResultJson()))
+                .orElse(response);
+    }
+
+    private ResearchTaskResponse reviewPreview(ResearchTaskResponse response, String resultJson) {
+        try {
+            AgentContextCheckpoint payload = objectMapper.readValue(resultJson, AgentContextCheckpoint.class);
+            String verdict = payload.reviewVerdict() == null ? null : payload.reviewVerdict().name();
+            String summary = payload.assistantSummary();
+            if ((summary == null || summary.isBlank()) && payload.decisionDraft() != null) {
+                summary = payload.decisionDraft().recommendation();
+            }
+            return response.withReview(verdict, summary);
+        } catch (Exception exception) {
+            return response;
+        }
     }
 
     private WorkspaceActiveDecision toActiveDecision(DecisionRecord decision) {

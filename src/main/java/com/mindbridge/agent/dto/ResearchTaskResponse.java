@@ -24,7 +24,9 @@ public record ResearchTaskResponse(
         Instant createdAt,
         Instant updatedAt,
         Instant startedAt,
-        Instant completedAt
+        Instant completedAt,
+        String reviewVerdict,
+        String reviewSummary
 ) {
     public static ResearchTaskResponse from(ResearchTask task) {
         return new ResearchTaskResponse(
@@ -45,7 +47,34 @@ public record ResearchTaskResponse(
                 task.getCreatedAt(),
                 task.getUpdatedAt(),
                 task.getStartedAt(),
-                task.getCompletedAt()
+                task.getCompletedAt(),
+                null,
+                null
+        );
+    }
+
+    public ResearchTaskResponse withReview(String verdict, String summary) {
+        return new ResearchTaskResponse(
+                id,
+                publicId,
+                type,
+                status,
+                currentStage,
+                progressPercent,
+                question,
+                sourceId,
+                decisionId,
+                experimentId,
+                resultReferenceId,
+                errorCode,
+                errorMessage,
+                attemptCount,
+                createdAt,
+                updatedAt,
+                startedAt,
+                completedAt,
+                verdict,
+                summary
         );
     }
 }

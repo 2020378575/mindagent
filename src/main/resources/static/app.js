@@ -71,6 +71,7 @@
   });
 
   const LEGACY_STORAGE_KEY = "evidencelab.session.v1";
+  const SESSION_KEY = "evidencelab.workspace.v2";
 
   const state = {
     auth: null,
@@ -89,6 +90,60 @@
   function clearLegacySession() {
     try { localStorage.removeItem(LEGACY_STORAGE_KEY); } catch (_) { /* ignore */ }
     try { sessionStorage.removeItem(LEGACY_STORAGE_KEY); } catch (_) { /* ignore */ }
+  }
+
+  function persistSession() {
+    try {
+      if (!state.auth) {
+        sessionStorage.removeItem(SESSION_KEY);
+        return;
+      }
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
+        username: state.username,
+        auth: state.auth,
+        roleLabel: state.roleLabel,
+        projectId: state.projectId,
+        view: state.view
+      }));
+    } catch (_) { /* ignore */ }
+  }
+
+  function readSession() {
+    try {
+      return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
+    } catch (_) {
+      return null;
+    }
+  }
+
+  let workspacePoll = null;
+
+  function activeTasksRunning() {
+    return (state.workspace?.recentTasks || []).some((task) =>
+      task.status === TASK_STATUS.PENDING || task.status === TASK_STATUS.RUNNING);
+  }
+
+  function syncTaskWatch() {
+    if (!state.projectId || !activeTasksRunning()) {
+      if (workspacePoll) {
+        window.clearInterval(workspacePoll);
+        workspacePoll = null;
+      }
+      return;
+    }
+    if (workspacePoll) return;
+    workspacePoll = window.setInterval(() => {
+      refreshWorkspace({ silent: true });
+    }, 2000);
+  }
+
+  function reviewLabel(verdict) {
+    return ({
+      SUPPORTED: "支持",
+      PARTIALLY_SUPPORTED: "部分支持",
+      REFUTED: "证伪",
+      INCONCLUSIVE: "证据不足"
+    })[verdict] || verdict;
   }
 
   async function api(path, options = {}) {
@@ -161,6 +216,7 @@
     el(DOM_ID.openAssistant).hidden = false;
     el(DOM_ID.refreshWorkspace).hidden = false;
     el(DOM_ID.backToProjects).hidden = !state.projectId;
+    persistSession();
   }
 
   function showProjectPicker() {
@@ -173,6 +229,7 @@
     el(DOM_ID.projectTitle).textContent = MESSAGES.noProject;
     el(DOM_ID.projectObjective).textContent = "选择已有项目，或新建一个研究项目。";
     renderProjects();
+    persistSession();
   }
 
   function logout() {
@@ -184,6 +241,7 @@
     state.assistantSessionId = null;
     state.view = VIEW_OVERVIEW;
     clearLegacySession();
+    persistSession();
     document.body.classList.add(AUTH_CLASSES.guest);
     document.body.classList.remove(AUTH_CLASSES.ready);
     el(DOM_ID.loginStage).hidden = false;
@@ -234,17 +292,20 @@
     await refreshWorkspace();
   }
 
-  async function refreshWorkspace() {
+  async function refreshWorkspace(options = {}) {
     if (!state.projectId) return;
-    showBanner(MESSAGES.loading);
+    if (!options.silent) showBanner(MESSAGES.loading);
     try {
       state.workspace = await api(ENDPOINTS.workspace(state.projectId));
       const project = state.workspace.project;
       el(DOM_ID.projectTitle).textContent = project.name;
       el(DOM_ID.projectObjective).textContent = project.objective || "";
       renderWorkspace();
-      showBanner("");
+      if (!options.silent) showBanner("");
+      persistSession();
+      syncTaskWatch();
     } catch (error) {
+      if (options.silent) return;
       showBanner(error.message || MESSAGES.error, true);
     }
   }
@@ -437,11 +498,15 @@
       } else if (task.status === TASK_STATUS.FAILED) {
         action = `<button type="button" class="btn btn-ghost" data-retry="${task.publicId}">重试</button>`;
       }
+      const reviewLine = task.reviewVerdict
+        ? `<p>复核裁决：${escapeHtml(reviewLabel(task.reviewVerdict))}${task.reviewSummary ? ` · ${escapeHtml(task.reviewSummary)}` : ""}</p>`
+        : "";
       return `
       <article class="list-row">
         <h4>${escapeHtml(task.type)} · ${escapeHtml(task.status)}</h4>
         <p class="muted">${escapeHtml(task.publicId)} · ${task.progressPercent || 0}%</p>
         <p>${escapeHtml(task.question || task.errorMessage || "")}</p>
+        ${reviewLine}
         ${action}
       </article>`;
     }).join("");
@@ -485,6 +550,7 @@
 
   function switchView(view) {
     state.view = view;
+    persistSession();
     document.querySelectorAll(".nav-item").forEach((item) => {
       item.classList.toggle("active", item.dataset.view === view);
     });
@@ -828,4 +894,42 @@
 
   clearLegacySession();
   refreshStatus();
+  restoreSession();
+
+  async function restoreSession() {
+    const saved = readSession();
+    if (!saved?.auth || !saved.username) return;
+    state.username = saved.username;
+    state.auth = saved.auth;
+    state.roleLabel = saved.roleLabel || MESSAGES.researcher;
+    state.projectId = saved.projectId ? Number(saved.projectId) : null;
+    state.view = saved.view || VIEW_OVERVIEW;
+    document.body.classList.remove(AUTH_CLASSES.guest);
+    document.body.classList.add(AUTH_CLASSES.ready);
+    el(DOM_ID.loginStage).hidden = true;
+    el(DOM_ID.app).hidden = false;
+    el(DOM_ID.activeAccount).textContent = state.username;
+    el(DOM_ID.activeRole).textContent = state.roleLabel;
+    el(DOM_ID.openAssistant).hidden = false;
+    el(DOM_ID.refreshWorkspace).hidden = false;
+    try {
+      const projects = await api(ENDPOINTS.projects);
+      state.projects = projects;
+      renderProjects();
+      const matched = state.projectId && projects.some((project) => Number(project.id) === state.projectId);
+      if (matched) {
+        el(DOM_ID.projectPicker).hidden = true;
+        el(DOM_ID.workspaceRoot).hidden = false;
+        el(DOM_ID.backToProjects).hidden = false;
+        switchView(state.view);
+        await refreshWorkspace();
+      } else {
+        state.projectId = null;
+        showProjectPicker();
+      }
+    } catch (_) {
+      state.auth = null;
+      logout();
+    }
+  }
 })();

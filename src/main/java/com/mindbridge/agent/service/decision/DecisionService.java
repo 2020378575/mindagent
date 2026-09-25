@@ -22,6 +22,7 @@ import com.mindbridge.agent.repository.DecisionReviewRepository;
 import com.mindbridge.agent.repository.ExperimentRunRepository;
 import com.mindbridge.agent.repository.ResearchMemoryItemRepository;
 import com.mindbridge.agent.service.agent.AgentContextCheckpoint;
+import com.mindbridge.agent.service.agent.ReviewVerdicts;
 import com.mindbridge.agent.service.agent.DecisionDraft;
 import com.mindbridge.agent.service.memory.ResearchLongTermMemoryService;
 import com.mindbridge.agent.service.memory.ResearchProjectEvent;
@@ -31,7 +32,6 @@ import com.mindbridge.agent.service.task.ResearchTaskService;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -201,7 +201,7 @@ public class DecisionService {
     @Transactional
     public DecisionRecord startValidation(Long userId, Long projectId, Long decisionId, Long experimentId) {
         DecisionRecord decision = requireOwned(userId, projectId, decisionId);
-        if (decision.getStatus() != DecisionStatus.CONFIRMED) {
+        if (decision.getStatus() != DecisionStatus.CONFIRMED && decision.getStatus() != DecisionStatus.REVIEWED) {
             throw new IllegalStateException(INVALID_TRANSITION);
         }
         ExperimentRun experiment = experimentRunRepository.findByIdAndProject_IdAndOwner_Id(experimentId, projectId, userId)
@@ -226,11 +226,8 @@ public class DecisionService {
     @Transactional
     public DecisionReview confirmReview(Long userId, Long projectId, Long decisionId, Long reviewTaskId) {
         DecisionRecord decision = requireOwned(userId, projectId, decisionId);
-        if (decision.getStatus() != DecisionStatus.VALIDATING) {
+        if (decision.getStatus() != DecisionStatus.VALIDATING && decision.getStatus() != DecisionStatus.REVIEWED) {
             throw new IllegalStateException(INVALID_TRANSITION);
-        }
-        if (decision.getExperimentId() == null) {
-            throw new IllegalStateException("Decision has no linked experiment");
         }
         ResearchTask task = researchTaskService.getRequired(reviewTaskId);
         if (!projectId.equals(task.projectId())
@@ -238,17 +235,27 @@ public class DecisionService {
                 || task.getType() != ResearchTaskType.RESULT_REVIEW) {
             throw new IllegalArgumentException("Review task not found");
         }
+        if (task.getStatus() != ResearchTaskStatus.WAITING_FOR_CONFIRMATION) {
+            throw new IllegalStateException("Review task is not waiting for confirmation");
+        }
+        Long experimentId = task.getExperimentId() != null ? task.getExperimentId() : decision.getExperimentId();
+        if (experimentId == null) {
+            throw new IllegalStateException("Decision has no linked experiment");
+        }
         ReviewVerdict verdict = resolveVerdict(task);
         String summary = resolveReviewSummary(task, decision);
         DecisionReview review = new DecisionReview();
         review.setDecision(decision);
-        review.setExperimentId(decision.getExperimentId());
+        review.setExperimentId(experimentId);
         review.setReviewTaskId(reviewTaskId);
         review.setVerdict(verdict);
         review.setSummary(summary);
         DecisionReview saved = decisionReviewRepository.save(review);
 
         decision.setStatus(DecisionStatus.REVIEWED);
+        if (decision.getExperimentId() == null) {
+            decision.setExperimentId(experimentId);
+        }
         decision.touch();
         decisionRecordRepository.save(decision);
         researchTaskService.markSucceeded(reviewTaskId, saved.getId());
@@ -370,20 +377,11 @@ public class DecisionService {
                 AgentContextCheckpoint payload = objectMapper.readValue(
                         latest.get().getResultJson(),
                         AgentContextCheckpoint.class);
-                if (payload.decisionDraft() != null && payload.decisionDraft().recommendation() != null) {
-                    String text = payload.decisionDraft().recommendation().toLowerCase(Locale.ROOT);
-                    if (text.contains("refut") || text.contains("证伪") || text.contains("否定")) {
-                        return ReviewVerdict.REFUTED;
-                    }
-                    if (text.contains("partial") || text.contains("部分")) {
-                        return ReviewVerdict.PARTIALLY_SUPPORTED;
-                    }
-                    if (text.contains("inconclusive") || text.contains("不确定") || text.contains("不足")) {
-                        return ReviewVerdict.INCONCLUSIVE;
-                    }
-                    if (text.contains("support") || text.contains("验证") || text.contains("支持")) {
-                        return ReviewVerdict.SUPPORTED;
-                    }
+                if (payload.reviewVerdict() != null) {
+                    return payload.reviewVerdict();
+                }
+                if (payload.decisionDraft() != null) {
+                    return ReviewVerdicts.fromRecommendation(payload.decisionDraft().recommendation());
                 }
             } catch (Exception ignored) {
                 // fall through

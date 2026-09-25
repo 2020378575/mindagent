@@ -2,6 +2,7 @@ package com.mindbridge.agent.service.agent;
 
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.ResearchTaskStage;
+import com.mindbridge.agent.domain.ReviewVerdict;
 import com.mindbridge.agent.service.task.TaskCheckpointPayload;
 import java.util.List;
 
@@ -20,7 +21,8 @@ public record AgentContextCheckpoint(
         boolean evidenceCritiqued,
         boolean responseCompleted,
         String knowledgeQuery,
-        String assistantSummary
+        String assistantSummary,
+        ReviewVerdict reviewVerdict
 ) implements TaskCheckpointPayload {
 
     public AgentContextCheckpoint {

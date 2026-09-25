@@ -20,7 +20,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 /**
- * 确定性决策校验：引用必须存在、属主、属于当前项目，且出现在任务检索证据中。
+ * 确定性决策校验：引用必须存在，属于当前项目或内置全局知识（projectId 为空），
+ * 且出现在任务检索证据中。其他项目的切块一律拒绝。
  */
 public class DecisionValidationService {
 
@@ -145,7 +146,7 @@ public class DecisionValidationService {
                 continue;
             }
             KnowledgeChunk chunk = optional.get();
-            if (chunk.projectId() == null || !projectId.equals(chunk.projectId())) {
+            if (!visibleToProject(projectId, chunk.projectId())) {
                 errors.add("citation chunk %d does not belong to current project".formatted(chunkId));
                 continue;
             }
@@ -160,6 +161,10 @@ public class DecisionValidationService {
             citations.add(new ValidatedCitation(chunkId, stance, chunk.getSource(), excerpt));
         }
         return citations;
+    }
+
+    private boolean visibleToProject(Long projectId, Long chunkProjectId) {
+        return chunkProjectId == null || projectId.equals(chunkProjectId);
     }
 
     private Set<Long> loadRetrievedChunkIds(Long taskId) {

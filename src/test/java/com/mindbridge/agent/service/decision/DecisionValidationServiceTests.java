@@ -60,6 +60,22 @@ class DecisionValidationServiceTests {
     }
 
     @Test
+    void acceptsBuiltinCitationWithoutProject() {
+        KnowledgeChunk global = new KnowledgeChunk();
+        global.setId(7L);
+        global.setSource("lora-notes.md");
+        global.setContent("builtin evidence");
+        global.setStartOffset(0);
+        global.setEndOffset(10);
+        when(chunkRepository.findById(7L)).thenReturn(Optional.of(global));
+
+        DecisionValidationResult result = validator.validate(PROJECT_A, draft(List.of(7L), List.of()));
+
+        assertThat(result.valid()).isTrue();
+        assertThat(result.supporting()).extracting(ValidatedCitation::chunkId).containsExactly(7L);
+    }
+
+    @Test
     void acceptsOwnedCitationsWithGapsLoweringConfidence() {
         when(chunkRepository.findById(1L)).thenReturn(Optional.of(chunk(1L, PROJECT_A, "local")));
 
