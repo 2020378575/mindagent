@@ -22,6 +22,16 @@ class McpSecurityApiTests {
     private WebTestClient webTestClient;
 
     @Test
+    void agentStatusIsPublicWithoutAuthChallenge() {
+        webTestClient.get().uri("/api/agent/status")
+                .exchange()
+                .expectStatus().isOk()
+                .expectHeader().doesNotExist("WWW-Authenticate")
+                .expectBody()
+                .jsonPath("$.product").isEqualTo("EvidenceLab");
+    }
+
+    @Test
     void configuredMcpPathsRequireAdmin() {
         webTestClient.get().uri(SSE_PATH).exchange().expectStatus().isUnauthorized();
         webTestClient.get().uri(SSE_PATH)

@@ -196,7 +196,9 @@
 
   async function refreshStatus() {
     try {
-      const status = await fetch(ENDPOINTS.status).then((r) => r.json());
+      const response = await fetch(ENDPOINTS.status, { signal: AbortSignal.timeout(5000) });
+      if (!response.ok) throw new Error(String(response.status));
+      const status = await response.json();
       setStatusText(status.product || "EvidenceLab", `模型：${status.model || "unknown"}`);
     } catch (_) {
       setStatusText(MESSAGES.disconnected, "模型：不可用");

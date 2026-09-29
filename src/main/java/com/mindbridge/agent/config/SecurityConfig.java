@@ -3,6 +3,7 @@ package com.mindbridge.agent.config;
 import com.mindbridge.agent.security.CurrentUserDetailsService;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
@@ -39,6 +40,7 @@ public class SecurityConfig {
                 .authorizeExchange(auth -> auth
                         .pathMatchers("/", "/index.html", "/app.js", "/styles.css", "/favicon.svg",
                                 "/actuator/health").permitAll()
+                        .pathMatchers(HttpMethod.GET, "/api/agent/status").permitAll()
                         .pathMatchers(mcpSsePath, mcpMessagePath, mcpMessagePath + "/**").hasRole(ADMIN_ROLE)
                         .pathMatchers("/api/admin/**").hasRole(ADMIN_ROLE)
                         .pathMatchers("/api/reports/**").hasRole(ADMIN_ROLE)
