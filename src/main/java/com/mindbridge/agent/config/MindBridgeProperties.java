@@ -86,7 +86,7 @@ public class MindBridgeProperties {
         /** 生成温度，值越高回答越发散。 */
         private double temperature = 0.35;
         /** 学生端单次回复的最大生成 token 数，避免本地模型无边界扩写。 */
-        private int maxTokens = 512;
+        private int maxTokens = 1536;
         private final Ollama ollama = new Ollama();
         private final OpenAi openai = new OpenAi();
 

@@ -82,7 +82,8 @@
     workspace: null,
     view: VIEW_OVERVIEW,
     loading: false,
-    assistantSessionId: null
+    assistantSessionId: null,
+    watchUpload: false
   };
 
   const el = (id) => document.getElementById(id);
@@ -241,6 +242,7 @@
     state.projectId = null;
     state.workspace = null;
     state.assistantSessionId = null;
+    state.watchUpload = false;
     state.view = VIEW_OVERVIEW;
     clearLegacySession();
     persistSession();
@@ -296,20 +298,42 @@
 
   async function refreshWorkspace(options = {}) {
     if (!state.projectId) return;
-    if (!options.silent) showBanner(MESSAGES.loading);
+    if (!options.silent && !options.banner && !state.watchUpload) showBanner(MESSAGES.loading);
     try {
       state.workspace = await api(ENDPOINTS.workspace(state.projectId));
       const project = state.workspace.project;
       el(DOM_ID.projectTitle).textContent = project.name;
       el(DOM_ID.projectObjective).textContent = project.objective || "";
       renderWorkspace();
-      if (!options.silent) showBanner("");
+      if (state.watchUpload) {
+        showUploadBanner();
+      } else if (options.banner) {
+        showBanner(options.banner, !!options.bannerError);
+      } else if (!options.silent) {
+        showBanner("");
+      }
       persistSession();
       syncTaskWatch();
     } catch (error) {
       if (options.silent) return;
       showBanner(error.message || MESSAGES.error, true);
     }
+  }
+
+  function showUploadBanner() {
+    const sources = state.workspace?.sources || [];
+    const busy = sources.some((source) => ["PENDING", "PARSING", "INDEXING"].includes(source.status));
+    if (busy) {
+      showBanner("资料已上传，正在解析。完成后会出现在证据库。");
+      return;
+    }
+    state.watchUpload = false;
+    const failed = sources.find((source) => source.status === "FAILED");
+    if (failed) {
+      showBanner(failed.failureMessage || "资料解析失败。", true);
+      return;
+    }
+    showBanner("资料解析完成，已进入证据库。");
   }
 
   function renderWorkspace() {
@@ -390,7 +414,7 @@
             body: JSON.stringify({})
           });
           showBanner("决策已确认。");
-          await refreshWorkspace();
+          await refreshWorkspace({ banner: "决策已确认。" });
         } catch (error) {
           showBanner(error.message || MESSAGES.error, true);
         } finally {
@@ -415,7 +439,7 @@
             method: POST_METHOD
           });
           showBanner("草稿已放弃。");
-          await refreshWorkspace();
+          await refreshWorkspace({ banner: "草稿已放弃。" });
         } catch (error) {
           showBanner(error.message || MESSAGES.error, true);
         } finally {
@@ -458,7 +482,7 @@
           });
           showBanner("实验结果已提交，已自动创建结果复核任务，请到 Agent 轨迹查看。");
           switchView(VIEW_TASKS);
-          await refreshWorkspace();
+          await refreshWorkspace({ banner: "实验结果已提交，已自动创建结果复核任务，请到 Agent 轨迹查看。" });
         } catch (error) {
           showBanner(error.message || MESSAGES.error, true);
         }
@@ -476,9 +500,20 @@
     root.innerHTML = sources.map((source) => `
       <article class="list-row">
         <h4>${escapeHtml(source.filename || "source")}</h4>
-        <p class="muted">${escapeHtml(source.status || "")}</p>
+        <p class="muted">${escapeHtml(sourceStatusLabel(source.status))}${source.chunkCount ? ` · ${source.chunkCount} 段` : ""}</p>
+        ${source.failureMessage ? `<p>${escapeHtml(source.failureMessage)}</p>` : ""}
       </article>
     `).join("");
+  }
+
+  function sourceStatusLabel(status) {
+    return ({
+      PENDING: "等待解析",
+      PARSING: "解析中",
+      INDEXING: "写入索引",
+      READY: "可用",
+      FAILED: "解析失败"
+    })[status] || status || "";
   }
 
   function renderTasks() {
@@ -516,8 +551,7 @@
       button.onclick = async () => {
         try {
           await api(ENDPOINTS.decisionFromTask(state.projectId, button.dataset.draft), { method: POST_METHOD });
-          showBanner("已生成决策草稿，请到决策账本确认。");
-          await refreshWorkspace();
+          await refreshWorkspace({ banner: "已生成决策草稿，请到决策账本确认。" });
         } catch (error) {
           showBanner(error.message || MESSAGES.error, true);
         }
@@ -531,8 +565,7 @@
             button.dataset.reviewDecision,
             button.dataset.reviewTask
           ), { method: POST_METHOD });
-          showBanner("复核已确认，决策进入 REVIEWED。");
-          await refreshWorkspace();
+          await refreshWorkspace({ banner: "复核已确认，决策进入 REVIEWED。" });
         } catch (error) {
           showBanner(error.message || MESSAGES.error, true);
         }
@@ -559,6 +592,15 @@
     [VIEW_OVERVIEW, "decisions", "experiments", "sources", VIEW_TASKS].forEach((name) => {
       el(`view-${name}`).hidden = name !== view;
     });
+  }
+
+  function renderRichText(value) {
+    const escaped = escapeHtml(value);
+    return escaped
+      .replace(/^#{1,6}\s*(.+)$/gm, "<strong>$1</strong>")
+      .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+      .replace(/`([^`]+)`/g, "<code>$1</code>")
+      .replace(/\n/g, "<br>");
   }
 
   function escapeHtml(value) {
@@ -696,7 +738,7 @@
     log.appendChild(userBubble);
     const botBubble = document.createElement("div");
     botBubble.className = "bubble";
-    botBubble.textContent = "";
+    let answer = "";
     log.appendChild(botBubble);
 
     const response = await fetch(ENDPOINTS.assistantStream, {
@@ -733,14 +775,18 @@
           if (payload.type === "meta" && payload.sessionId) {
             state.assistantSessionId = payload.sessionId;
           }
-          if (payload.type === "token" && payload.content) botBubble.textContent += payload.content;
+          if (payload.type === "token" && payload.content) {
+            answer += payload.content;
+            botBubble.innerHTML = renderRichText(answer);
+          }
           if (payload.type === "error" && payload.content) {
+            answer = payload.content;
             botBubble.textContent = payload.content;
           }
         } catch (_) { /* ignore partial */ }
       });
     }
-    if (!botBubble.textContent) botBubble.textContent = "（无内容）";
+    if (!answer) botBubble.textContent = "（无内容）";
     log.scrollTop = log.scrollHeight;
   }
 
@@ -854,9 +900,16 @@
     if (!file || !state.projectId) return;
     const form = new FormData();
     form.append("file", file);
-    await api(ENDPOINTS.sources(state.projectId), { method: POST_METHOD, body: form });
     event.target.value = "";
-    await refreshWorkspace();
+    try {
+      state.watchUpload = true;
+      await api(ENDPOINTS.sources(state.projectId), { method: POST_METHOD, body: form });
+      switchView(VIEW_TASKS);
+      await refreshWorkspace();
+    } catch (error) {
+      state.watchUpload = false;
+      showBanner(error.message || MESSAGES.error, true);
+    }
   };
 
   el("assistantForm").addEventListener("submit", async (event) => {

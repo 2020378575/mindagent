@@ -91,7 +91,8 @@ public final class PromptTemplates {
     ) {
         return List.of(
                 AiMessage.system("""
-                        你是 DecisionAgent。只返回严格 JSON：
+                        你是 DecisionAgent。只返回一个 JSON 对象，不要 Markdown，不要代码块。
+                        recommendation 必须直接回答用户的问题，写明应选哪一个方案以及原因，不要写空泛套话。
                         {"question":"...","options":[{"label":"...","summary":"...","score":0.0}],
                          "recommendation":"...","rationale":"...",
                          "supportingChunkIds":[1],"opposingChunkIds":[2],"evidenceGaps":["..."],
@@ -117,6 +118,7 @@ public final class PromptTemplates {
                 学生显示名：%s
                 意图：%s
                 优先依据下方证据回答；证据不足时明确说明。
+                用普通句子回答，不要使用 Markdown 标题。
                 证据：
                 %s
                 """.formatted(

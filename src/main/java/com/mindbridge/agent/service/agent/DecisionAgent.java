@@ -67,16 +67,17 @@ public class DecisionAgent implements ResearchAgent {
     }
 
     private DecisionDraft draft(AgentContext context) {
+        String raw = "";
         DecisionDraft rawDraft;
         try {
-            String raw = aiClient.complete(PromptTemplates.decisionDraftPrompt(
+            raw = aiClient.complete(PromptTemplates.decisionDraftPrompt(
                     context.intent(),
                     context.modelInput(),
                     context.retrievedEvidence(),
                     context.critique()));
             rawDraft = parse(raw, context);
         } catch (Exception exception) {
-            rawDraft = heuristic(context);
+            rawDraft = heuristic(context, raw);
         }
         return sanitizeCitations(rawDraft, context);
     }
@@ -106,7 +107,7 @@ public class DecisionAgent implements ResearchAgent {
     }
 
     private DecisionDraft parse(String raw, AgentContext context) throws Exception {
-        JsonNode root = objectMapper.readTree(extractJson(raw));
+        JsonNode root = objectMapper.readTree(DecisionResponses.extractObject(raw));
         List<DecisionOption> options = new ArrayList<>();
         if (root.path("options").isArray()) {
             for (JsonNode option : root.path("options")) {
@@ -124,7 +125,7 @@ public class DecisionAgent implements ResearchAgent {
         }
         String recommendation = root.path("recommendation").asText("");
         if (recommendation.isBlank()) {
-            return heuristic(context);
+            return heuristic(context, raw);
         }
         return new DecisionDraft(
                 root.path("question").asText(context.originalInput()),
@@ -139,7 +140,7 @@ public class DecisionAgent implements ResearchAgent {
                 root.path("confidence").asDouble(0.6));
     }
 
-    private DecisionDraft heuristic(AgentContext context) {
+    private DecisionDraft heuristic(AgentContext context, String raw) {
         List<Long> supporting = context.retrievedEvidence().stream()
                 .map(SearchResult::chunkId)
                 .filter(id -> id != null)
@@ -147,7 +148,10 @@ public class DecisionAgent implements ResearchAgent {
                 .toList();
         EvidenceCritique critique = context.critique();
         List<String> gaps = critique == null ? List.of() : critique.evidenceGaps();
-        String recommendation = context.intent() == IntentType.RESULT_REVIEW
+        String recovered = DecisionResponses.recommendation(raw);
+        String recommendation = recovered != null
+                ? recovered
+                : context.intent() == IntentType.RESULT_REVIEW
                 ? "证据不足以完全验证，建议补充对照实验"
                 : "优先选择证据更充分的方案，并补最小验证实验";
         return new DecisionDraft(
@@ -156,7 +160,9 @@ public class DecisionAgent implements ResearchAgent {
                         new DecisionOption("Option A", "证据支持相对更强", 0.6),
                         new DecisionOption("Option B", "证据不足或有反证", 0.4)),
                 recommendation,
-                "基于当前项目证据与批判结果的保守建议。",
+                recovered != null
+                        ? "模型输出不是完整 JSON，已保留其中的推荐句。"
+                        : "基于当前项目证据与批判结果的保守建议。",
                 supporting,
                 List.of(),
                 gaps,
@@ -178,12 +184,4 @@ public class DecisionAgent implements ResearchAgent {
         return values;
     }
 
-    private String extractJson(String raw) {
-        int start = raw.indexOf('{');
-        int end = raw.lastIndexOf('}');
-        if (start >= 0 && end > start) {
-            return raw.substring(start, end + 1);
-        }
-        return raw;
-    }
 }
