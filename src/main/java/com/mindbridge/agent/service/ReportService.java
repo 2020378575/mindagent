@@ -83,7 +83,7 @@ public class ReportService {
     @Transactional(readOnly = true)
     public ConversationResponse conversation(String sessionId) {
         ChatSession session = chatSessionRepository.findByPublicId(sessionId)
-                .orElseThrow(() -> new IllegalArgumentException("Conversation not found"));
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found"));
         // 管理员只能查看学生会话；非学生会话统一按不存在处理，减少后台数据误展示。
         if (!isStudentUser(session.getUser())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Conversation not found");

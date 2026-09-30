@@ -33,6 +33,7 @@ public class SecurityConfig {
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
                 .authorizeExchange(auth -> auth
                         .pathMatchers("/actuator/health", "/api/agent/status", "/h2-console/**").permitAll()
+                        .pathMatchers("/api/reports/me").authenticated()
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")
                         .pathMatchers("/api/reports/**").hasRole("ADMIN")
                         .pathMatchers("/api/**").authenticated()

@@ -165,12 +165,33 @@
     const deadline = Date.now() + timeoutMs;
     while (Date.now() < deadline) {
       const task = await api(ENDPOINTS.task(state.projectId, publicId));
-      if ([TASK_STATUS.SUCCEEDED, TASK_STATUS.FAILED, TASK_STATUS.CANCELLED].includes(task.status)) {
+      if ([
+        TASK_STATUS.WAITING_FOR_CONFIRMATION,
+        TASK_STATUS.SUCCEEDED,
+        TASK_STATUS.FAILED,
+        TASK_STATUS.CANCELLED
+      ].includes(task.status)) {
         return task;
       }
       await new Promise((resolve) => setTimeout(resolve, 500));
     }
-    throw new Error("资料处理仍在进行，请稍后刷新。");
+    throw new Error("任务处理仍在进行，请稍后刷新。");
+  }
+
+  async function followTask(task, progressMessage) {
+    showBanner(progressMessage);
+    try {
+      const completed = await waitForTask(task.publicId);
+      await refreshWorkspace();
+      if ([TASK_STATUS.FAILED, TASK_STATUS.CANCELLED].includes(completed.status)) {
+        showBanner(completed.errorMessage || "任务未能完成，请重试。", true);
+      }
+      return completed;
+    } catch (error) {
+      await refreshWorkspace();
+      showBanner(error.message || MESSAGES.error, true);
+      return null;
+    }
   }
 
   function renderWorkspace() {
@@ -306,8 +327,8 @@
     });
     root.querySelectorAll("[data-retry]").forEach((button) => {
       button.onclick = async () => {
-        await api(ENDPOINTS.taskRetry(state.projectId, button.dataset.retry), { method: "POST" });
-        await refreshWorkspace();
+        const task = await api(ENDPOINTS.taskRetry(state.projectId, button.dataset.retry), { method: "POST" });
+        await followTask(task, "正在重试任务…");
       };
     });
   }
@@ -435,12 +456,12 @@
   el("startDecisionTask").onclick = async () => {
     const question = prompt("决策问题", "12GB 显存该选 LoRA 还是 QLoRA？");
     if (!question) return;
-    await api(ENDPOINTS.assistantDecision, {
+    const task = await api(ENDPOINTS.assistantDecision, {
       method: "POST",
       body: JSON.stringify({ projectId: state.projectId, question })
     });
     switchView("tasks");
-    await refreshWorkspace();
+    await followTask(task, "正在生成决策研究结果…");
   };
 
   el("createExperimentBtn").onclick = async () => {
@@ -498,14 +519,14 @@
   el("assistantDecisionBtn").onclick = async () => {
     const question = el("assistantInput").value.trim();
     if (!question || !state.projectId) return;
-    await api(ENDPOINTS.assistantDecision, {
+    const task = await api(ENDPOINTS.assistantDecision, {
       method: "POST",
       body: JSON.stringify({ projectId: state.projectId, question })
     });
     el("assistantInput").value = "";
     el("assistantDrawer").hidden = true;
     switchView("tasks");
-    await refreshWorkspace();
+    await followTask(task, "正在生成决策研究结果…");
   };
 
   el("retryFailedTask").onclick = async () => {
@@ -514,8 +535,8 @@
       showBanner("没有失败任务可重试。");
       return;
     }
-    await api(ENDPOINTS.taskRetry(state.projectId, failed.publicId), { method: "POST" });
-    await refreshWorkspace();
+    const task = await api(ENDPOINTS.taskRetry(state.projectId, failed.publicId), { method: "POST" });
+    await followTask(task, "正在重试任务…");
   };
 
   refreshStatus();

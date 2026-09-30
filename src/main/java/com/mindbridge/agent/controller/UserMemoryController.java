@@ -4,12 +4,14 @@ import com.mindbridge.agent.dto.UserMemoryItemResponse;
 import com.mindbridge.agent.security.CurrentUser;
 import com.mindbridge.agent.service.memory.UserProfileMemoryService;
 import java.util.List;
+import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 @RestController
 @RequestMapping("/api/profile/memory")
@@ -36,6 +38,10 @@ public class UserMemoryController {
             @AuthenticationPrincipal CurrentUser currentUser,
             @PathVariable Long memoryId
     ) {
-        userProfileMemoryService.deleteMemory(currentUser.getId(), memoryId);
+        try {
+            userProfileMemoryService.deleteMemory(currentUser.getId(), memoryId);
+        } catch (IllegalArgumentException exception) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, exception.getMessage());
+        }
     }
 }
