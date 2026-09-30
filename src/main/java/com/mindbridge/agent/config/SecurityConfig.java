@@ -32,7 +32,7 @@ public class SecurityConfig {
                 .httpBasic(Customizer.withDefaults())
                 .formLogin(ServerHttpSecurity.FormLoginSpec::disable)
                 .authorizeExchange(auth -> auth
-                        .pathMatchers("/actuator/health", "/h2-console/**").permitAll()
+                        .pathMatchers("/actuator/health", "/api/agent/status", "/h2-console/**").permitAll()
                         .pathMatchers("/api/admin/**").hasRole("ADMIN")
                         .pathMatchers("/api/reports/**").hasRole("ADMIN")
                         .pathMatchers("/api/**").authenticated()

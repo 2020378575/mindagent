@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.when;
 
 import com.mindbridge.agent.domain.UserAccount;
+import com.mindbridge.agent.dto.ChatRequest;
 import com.mindbridge.agent.dto.CreateExperimentRequest;
 import com.mindbridge.agent.dto.CreateResearchProjectRequest;
 import com.mindbridge.agent.dto.CreateResearchTaskRequest;
@@ -17,6 +18,7 @@ import com.mindbridge.agent.dto.ResearchTaskResponse;
 import com.mindbridge.agent.dto.ResearchWorkspaceResponse;
 import com.mindbridge.agent.domain.ResearchTaskStatus;
 import com.mindbridge.agent.domain.ResearchTaskType;
+import com.mindbridge.agent.repository.ChatSessionRepository;
 import com.mindbridge.agent.service.ai.AiClient;
 import com.mindbridge.agent.service.memory.ShortTermMemoryService;
 import com.mindbridge.agent.service.memory.UserProfileMemoryService;
@@ -59,6 +61,9 @@ class ResearchWorkspaceApiHarnessTests {
     @MockBean
     private UserProfileMemoryService userProfileMemoryService;
 
+    @Autowired
+    private ChatSessionRepository chatSessionRepository;
+
     @BeforeEach
     void setUp() {
         ResearchScriptedAiClient scripted = new ResearchScriptedAiClient();
@@ -74,8 +79,15 @@ class ResearchWorkspaceApiHarnessTests {
 
     @Test
     void projectToExperimentJourneyExposesValidatingWorkspace() {
+        webTestClient.get()
+                .uri("/api/agent/status")
+                .exchange()
+                .expectStatus().isOk();
+
         Long projectId = createProject();
+        createProject();
         uploadSource(projectId, "qlora-paper.md");
+        continueAssistantConversation(projectId);
         ResearchTaskResponse decisionTask = createDecisionTask(projectId, "12GB 显存该选 LoRA 还是 QLoRA？");
         ResearchTaskResponse waiting = awaitTask(projectId, decisionTask.publicId(), ResearchTaskStatus.WAITING_FOR_CONFIRMATION);
         String decisionId = confirmDecision(projectId, waiting.id());
@@ -87,6 +99,29 @@ class ResearchWorkspaceApiHarnessTests {
                 .contains(decisionId)
                 .contains(experimentId)
                 .contains("VALIDATING");
+    }
+
+    private void continueAssistantConversation(Long projectId) {
+        chat(projectId, null, "根据当前项目资料解释 QLoRA");
+        var sessions = chatSessionRepository.findAll();
+        assertThat(sessions).hasSize(1);
+        assertThat(sessions.get(0).getProject().getId()).isEqualTo(projectId);
+
+        chat(projectId, sessions.get(0).getPublicId(), "继续说明 NF4 的作用");
+        assertThat(chatSessionRepository.findAll()).hasSize(1);
+    }
+
+    private void chat(Long projectId, String sessionId, String message) {
+        webTestClient.post()
+                .uri("/api/research/assistant/stream")
+                .headers(headers -> headers.setBasicAuth("student", "student123"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .accept(MediaType.TEXT_EVENT_STREAM)
+                .bodyValue(new ChatRequest(projectId, sessionId, message))
+                .exchange()
+                .expectStatus().isOk()
+                .expectBody(String.class)
+                .value(body -> assertThat(body).contains("\"type\":\"done\""));
     }
 
     private Long createProject() {

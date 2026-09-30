@@ -5,13 +5,11 @@ import com.mindbridge.agent.domain.ChatMessage;
 import com.mindbridge.agent.domain.ChatSession;
 import com.mindbridge.agent.domain.IntentType;
 import com.mindbridge.agent.domain.MessageRole;
-import com.mindbridge.agent.domain.ProjectStatus;
 import com.mindbridge.agent.domain.ResearchProject;
 import com.mindbridge.agent.domain.RiskLevel;
 import com.mindbridge.agent.domain.UserAccount;
 import com.mindbridge.agent.dto.ChatRequest;
 import com.mindbridge.agent.dto.ChatStreamEvent;
-import com.mindbridge.agent.dto.CreateResearchProjectRequest;
 import com.mindbridge.agent.repository.ChatMessageRepository;
 import com.mindbridge.agent.repository.ChatSessionRepository;
 import com.mindbridge.agent.repository.UserAccountRepository;
@@ -45,10 +43,6 @@ import reactor.core.scheduler.Schedulers;
 public class ChatService {
 
     private static final Logger log = LoggerFactory.getLogger(ChatService.class);
-    private static final String DEFAULT_PROJECT_NAME = "Default project";
-    private static final String DEFAULT_PROJECT_OBJECTIVE =
-            "Temporary workspace for existing conversations until the research workspace is ready.";
-
     private final UserAccountRepository userAccountRepository;
     private final ChatSessionRepository chatSessionRepository;
     private final ChatMessageRepository chatMessageRepository;
@@ -101,7 +95,8 @@ public class ChatService {
         String modelInput = privacySanitizer.sanitize(input);
         UserAccount user = userAccountRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("User not found"));
-        ChatSession session = resolveSession(user, request.sessionId(), input);
+        ResearchProject project = researchProjectService.requireOwnedProject(user.getId(), request.projectId());
+        ChatSession session = resolveSession(user, project, request.sessionId(), input);
         Instant startedAt = Instant.now();
         AgentContext context = new AgentContext(
                 null,
@@ -148,29 +143,26 @@ public class ChatService {
         return meta.concatWith(tokens).concatWith(done);
     }
 
-    private ChatSession resolveSession(UserAccount user, String publicId, String input) {
+    private ChatSession resolveSession(
+            UserAccount user,
+            ResearchProject project,
+            String publicId,
+            String input
+    ) {
         if (publicId != null && !publicId.isBlank()) {
-            return chatSessionRepository.findByPublicIdAndUser_Id(publicId, user.getId())
+            ChatSession session = chatSessionRepository.findByPublicIdAndUser_Id(publicId, user.getId())
                     .orElseThrow(() -> new IllegalArgumentException("Session not found"));
+            if (!project.getId().equals(session.getProject().getId())) {
+                throw new IllegalArgumentException("Session not found");
+            }
+            return session;
         }
         ChatSession session = new ChatSession();
         session.setPublicId(UUID.randomUUID().toString().replace("-", ""));
         session.setUser(user);
-        session.setProject(resolveProject(user));
+        session.setProject(project);
         session.setTitle(input.length() > 36 ? input.substring(0, 36) : input);
         return chatSessionRepository.save(session);
-    }
-
-    private ResearchProject resolveProject(UserAccount user) {
-        return researchProjectService.list(user.getId()).stream()
-                .filter(project -> project.getStatus() == ProjectStatus.ACTIVE)
-                .findFirst()
-                .orElseGet(() -> researchProjectService.create(
-                        user.getId(),
-                        new CreateResearchProjectRequest(
-                                DEFAULT_PROJECT_NAME,
-                                DEFAULT_PROJECT_OBJECTIVE,
-                                null)));
     }
 
     private ChatMessage saveMessage(UserAccount user, ChatSession session, MessageRole role, String content) {

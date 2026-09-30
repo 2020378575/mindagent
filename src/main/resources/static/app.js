@@ -40,6 +40,7 @@
     auth: null,
     projects: [],
     projectId: null,
+    assistantSessionId: null,
     workspace: null,
     view: "overview",
     loading: false
@@ -104,6 +105,7 @@
   function logout() {
     state.auth = null;
     state.projectId = null;
+    state.assistantSessionId = null;
     state.workspace = null;
     el("loginForm").hidden = false;
     el("accountPanel").hidden = true;
@@ -137,6 +139,7 @@
   }
 
   async function selectProject(projectId) {
+    if (state.projectId !== projectId) state.assistantSessionId = null;
     state.projectId = projectId;
     el("projectPicker").hidden = true;
     el("workspaceRoot").hidden = false;
@@ -156,6 +159,18 @@
     } catch (error) {
       showBanner(error.message || MESSAGES.error, true);
     }
+  }
+
+  async function waitForTask(publicId, timeoutMs = 30000) {
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+      const task = await api(ENDPOINTS.task(state.projectId, publicId));
+      if ([TASK_STATUS.SUCCEEDED, TASK_STATUS.FAILED, TASK_STATUS.CANCELLED].includes(task.status)) {
+        return task;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 500));
+    }
+    throw new Error("资料处理仍在进行，请稍后刷新。");
   }
 
   function renderWorkspace() {
@@ -333,7 +348,11 @@
         "Content-Type": "application/json",
         Accept: "text/event-stream"
       },
-      body: JSON.stringify({ message })
+      body: JSON.stringify({
+        projectId: state.projectId,
+        sessionId: state.assistantSessionId,
+        message
+      })
     });
     if (!response.ok || !response.body) {
       botBubble.textContent = MESSAGES.error;
@@ -353,7 +372,13 @@
         if (!dataLine) return;
         try {
           const payload = JSON.parse(dataLine.slice(5).trim());
-          if (payload.type === "token" && payload.content) botBubble.textContent += payload.content;
+          if (payload.type === "meta" && payload.sessionId) {
+            state.assistantSessionId = payload.sessionId;
+          } else if (payload.type === "token" && payload.content) {
+            botBubble.textContent += payload.content;
+          } else if (payload.type === "error" && payload.content) {
+            botBubble.textContent = payload.content;
+          }
         } catch (_) { /* ignore partial */ }
       });
     }
@@ -443,9 +468,19 @@
     if (!file || !state.projectId) return;
     const form = new FormData();
     form.append("file", file);
-    await api(ENDPOINTS.sources(state.projectId), { method: "POST", body: form });
     event.target.value = "";
-    await refreshWorkspace();
+    try {
+      const created = await api(ENDPOINTS.sources(state.projectId), { method: "POST", body: form });
+      showBanner("正在解析并建立资料索引…");
+      const task = await waitForTask(created.task.publicId);
+      await refreshWorkspace();
+      if (task.status !== TASK_STATUS.SUCCEEDED) {
+        showBanner(task.errorMessage || "资料处理失败，请重试。", true);
+      }
+    } catch (error) {
+      await refreshWorkspace();
+      showBanner(error.message || MESSAGES.error, true);
+    }
   };
 
   el("assistantForm").addEventListener("submit", async (event) => {
