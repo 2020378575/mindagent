@@ -1,6 +1,7 @@
 package com.mindbridge.agent.config;
 
 import com.mindbridge.agent.service.ai.AiClient;
+import com.mindbridge.agent.service.ai.AiProviders;
 import com.mindbridge.agent.service.ai.SpringAiChatClient;
 import org.springframework.ai.ollama.OllamaChatModel;
 import org.springframework.ai.ollama.api.OllamaApi;
@@ -23,14 +24,14 @@ public class AiClientConfig {
     @Bean
     public AiClient aiClient(MindBridgeProperties properties) {
         String provider = properties.getAi().getProvider().toLowerCase();
-        if ("openai".equals(provider)) {
+        if (AiProviders.OPENAI.equals(provider)) {
             if (properties.getAi().getOpenai().getApiKey().isBlank()) {
                 throw new IllegalStateException("AI_PROVIDER=openai requires OPENAI_API_KEY.");
             }
             OpenAiChatModel model = openAiChatModel(properties);
             return new SpringAiChatClient(model, model);
         }
-        if ("ollama".equals(provider)) {
+        if (AiProviders.OLLAMA.equals(provider)) {
             OllamaChatModel model = ollamaChatModel(properties);
             return new SpringAiChatClient(model, model);
         }

@@ -1,10 +1,13 @@
 package com.mindbridge.agent.controller;
 
 import com.mindbridge.agent.config.MindBridgeProperties;
+import com.mindbridge.agent.service.ai.AiProviderHealthService;
+import com.mindbridge.agent.service.ai.AiProviders;
 import java.util.Locale;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
+import reactor.core.publisher.Mono;
 
 @RestController
 @RequestMapping("/api/agent")
@@ -16,36 +19,38 @@ import org.springframework.web.bind.annotation.RestController;
 public class AgentStatusController {
 
     private final MindBridgeProperties properties;
+    private final AiProviderHealthService healthService;
 
-    public AgentStatusController(MindBridgeProperties properties) {
+    public AgentStatusController(MindBridgeProperties properties, AiProviderHealthService healthService) {
         this.properties = properties;
+        this.healthService = healthService;
     }
 
     @GetMapping("/status")
-    public AgentStatusResponse status() {
-        // realModelEnabled 只表示当前使用真实模型客户端，不代表业务评估一定会展示给学生。
+    public Mono<AgentStatusResponse> status() {
         String provider = properties.getAi().getProvider().toLowerCase(Locale.ROOT);
-        boolean realModelEnabled = "openai".equals(provider) || "ollama".equals(provider);
-        return new AgentStatusResponse(
-                provider,
-                modelName(provider),
-                realModelEnabled,
-                properties.getKnowledge().isUseChroma(),
-                properties.getKnowledge().getTopK(),
-                properties.getKnowledge().isRerankerEnabled(),
-                properties.getKnowledge().getRerankerCandidateLimit(),
-                properties.getMemory().isUseChroma(),
-                properties.getMemory().getTopK(),
-                "EvidenceLab",
-                realModelEnabled ? "研究决策工作台已接入真实模型客户端。" : "当前模型 provider 配置不受支持。"
-        );
+        boolean realModelEnabled = AiProviders.OPENAI.equals(provider) || AiProviders.OLLAMA.equals(provider);
+        return healthService.isAvailable().map(modelAvailable -> new AgentStatusResponse(
+                    provider,
+                    modelName(provider),
+                    realModelEnabled,
+                    modelAvailable,
+                    properties.getKnowledge().isUseChroma(),
+                    properties.getKnowledge().getTopK(),
+                    properties.getKnowledge().isRerankerEnabled(),
+                    properties.getKnowledge().getRerankerCandidateLimit(),
+                    properties.getMemory().isUseChroma(),
+                    properties.getMemory().getTopK(),
+                    "EvidenceLab",
+                    modelAvailable ? "模型服务可用。" : "模型服务当前不可用。"
+                ));
     }
 
     private String modelName(String provider) {
-        if ("ollama".equals(provider)) {
+        if (AiProviders.OLLAMA.equals(provider)) {
             return properties.getAi().getOllama().getModel();
         }
-        if ("openai".equals(provider)) {
+        if (AiProviders.OPENAI.equals(provider)) {
             return properties.getAi().getOpenai().getModel();
         }
         return "unknown";
@@ -58,6 +63,7 @@ public class AgentStatusController {
             String provider,
             String model,
             boolean realModelEnabled,
+            boolean modelAvailable,
             boolean chromaEnabled,
             int ragTopK,
             boolean rerankerEnabled,

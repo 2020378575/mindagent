@@ -13,6 +13,8 @@ else
   DEFAULT_MAVEN_BIN="$(command -v mvn || true)"
 fi
 MAVEN_BIN="${MAVEN_BIN:-$DEFAULT_MAVEN_BIN}"
+AI_PROVIDER_VALUE="${AI_PROVIDER:-openai}"
+OPENAI_PROVIDER="openai"
 
 if [ ! -x "$MAVEN_BIN" ]; then
   echo "Cannot find Maven."
@@ -20,7 +22,7 @@ if [ ! -x "$MAVEN_BIN" ]; then
   exit 1
 fi
 
-if [ -z "${OPENAI_API_KEY:-}" ]; then
+if [ "$AI_PROVIDER_VALUE" = "$OPENAI_PROVIDER" ] && [ -z "${OPENAI_API_KEY:-}" ]; then
   echo "OPENAI_API_KEY is required."
   echo "The app now calls an OpenAI-compatible HTTP API instead of a local fine-tuned model."
   echo "Optional: OPENAI_BASE_URL (default https://api.openai.com) and OPENAI_MODEL (default gpt-4o-mini)."
@@ -29,7 +31,7 @@ fi
 
 mkdir -p data
 
-AI_PROVIDER="${AI_PROVIDER:-openai}" \
+AI_PROVIDER="$AI_PROVIDER_VALUE" \
 OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com}" \
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o-mini}" \
   "$MAVEN_BIN" -Dmaven.repo.local=.m2/repository spring-boot:run

@@ -19,6 +19,7 @@
     projectTitle: "projectTitle",
     promptModalConfirm: "promptModalConfirm",
     refreshWorkspace: "refreshWorkspace",
+    startDecisionTask: "startDecisionTask",
     workspaceRoot: "workspaceRoot"
   });
   const TASK_STATUS = Object.freeze({
@@ -77,6 +78,7 @@
     auth: null,
     username: null,
     roleLabel: null,
+    isAdmin: false,
     projects: [],
     projectId: null,
     workspace: null,
@@ -88,33 +90,10 @@
 
   const el = (id) => document.getElementById(id);
 
-  function clearLegacySession() {
+  function clearStoredSessions() {
     try { localStorage.removeItem(LEGACY_STORAGE_KEY); } catch (_) { /* ignore */ }
     try { sessionStorage.removeItem(LEGACY_STORAGE_KEY); } catch (_) { /* ignore */ }
-  }
-
-  function persistSession() {
-    try {
-      if (!state.auth) {
-        sessionStorage.removeItem(SESSION_KEY);
-        return;
-      }
-      sessionStorage.setItem(SESSION_KEY, JSON.stringify({
-        username: state.username,
-        auth: state.auth,
-        roleLabel: state.roleLabel,
-        projectId: state.projectId,
-        view: state.view
-      }));
-    } catch (_) { /* ignore */ }
-  }
-
-  function readSession() {
-    try {
-      return JSON.parse(sessionStorage.getItem(SESSION_KEY) || "null");
-    } catch (_) {
-      return null;
-    }
+    try { sessionStorage.removeItem(SESSION_KEY); } catch (_) { /* ignore */ }
   }
 
   let workspacePoll = null;
@@ -160,7 +139,7 @@
         const payload = await response.json();
         message = payload.message || message;
       } catch (_) { /* ignore */ }
-      if (response.status === 401 || response.status === 403) {
+      if (response.status === 401) {
         message = `登录已失效(${response.status})`;
       }
       throw new Error(message);
@@ -200,15 +179,23 @@
       const response = await fetch(ENDPOINTS.status, { signal: AbortSignal.timeout(5000) });
       if (!response.ok) throw new Error(String(response.status));
       const status = await response.json();
-      setStatusText(status.product || "EvidenceLab", `模型：${status.model || "unknown"}`);
+      const availability = status.modelAvailable ? "可用" : "不可用";
+      setStatusText(status.product || "EvidenceLab", `模型：${status.model || "unknown"}（${availability}）`);
     } catch (_) {
       setStatusText(MESSAGES.disconnected, "模型：不可用");
     }
   }
 
-  function setLoggedIn(username, password, roleLabel) {
+  function applyRoleCapabilities() {
+    el(DOM_ID.openAssistant).hidden = state.isAdmin;
+    el(DOM_ID.startDecisionTask).hidden = state.isAdmin;
+    if (state.isAdmin) el(DOM_ID.assistantDrawer).hidden = true;
+  }
+
+  function setLoggedIn(username, password, roleLabel, isAdmin) {
     state.username = username;
     state.roleLabel = roleLabel || MESSAGES.researcher;
+    state.isAdmin = Boolean(isAdmin);
     state.auth = btoa(`${username}:${password}`);
     document.body.classList.remove(AUTH_CLASSES.guest);
     document.body.classList.add(AUTH_CLASSES.ready);
@@ -216,10 +203,9 @@
     el(DOM_ID.app).hidden = false;
     el(DOM_ID.activeAccount).textContent = username;
     el(DOM_ID.activeRole).textContent = state.roleLabel;
-    el(DOM_ID.openAssistant).hidden = false;
     el(DOM_ID.refreshWorkspace).hidden = false;
     el(DOM_ID.backToProjects).hidden = !state.projectId;
-    persistSession();
+    applyRoleCapabilities();
   }
 
   function showProjectPicker() {
@@ -232,20 +218,19 @@
     el(DOM_ID.projectTitle).textContent = MESSAGES.noProject;
     el(DOM_ID.projectObjective).textContent = "选择已有项目，或新建一个研究项目。";
     renderProjects();
-    persistSession();
   }
 
   function logout() {
     state.auth = null;
     state.username = null;
     state.roleLabel = null;
+    state.isAdmin = false;
     state.projectId = null;
     state.workspace = null;
     state.assistantSessionId = null;
     state.watchUpload = false;
     state.view = VIEW_OVERVIEW;
-    clearLegacySession();
-    persistSession();
+    clearStoredSessions();
     document.body.classList.add(AUTH_CLASSES.guest);
     document.body.classList.remove(AUTH_CLASSES.ready);
     el(DOM_ID.loginStage).hidden = false;
@@ -312,7 +297,6 @@
       } else if (!options.silent) {
         showBanner("");
       }
-      persistSession();
       syncTaskWatch();
     } catch (error) {
       if (options.silent) return;
@@ -585,7 +569,6 @@
 
   function switchView(view) {
     state.view = view;
-    persistSession();
     document.querySelectorAll(".nav-item").forEach((item) => {
       item.classList.toggle("active", item.dataset.view === view);
     });
@@ -799,7 +782,7 @@
       const profile = await api(ENDPOINTS.profile);
       await loadProjects();
       const isAdmin = (profile.roles || []).some((role) => role.authority === "ROLE_ADMIN");
-      setLoggedIn(username, password, isAdmin ? "管理员" : MESSAGES.researcher);
+      setLoggedIn(username, password, isAdmin ? "管理员" : MESSAGES.researcher, isAdmin);
       el(DOM_ID.password).value = "";
       showBanner("");
     } catch (error) {
@@ -847,7 +830,7 @@
     await selectProject(project.id);
   });
 
-  el("startDecisionTask").onclick = async () => {
+  el(DOM_ID.startDecisionTask).onclick = async () => {
     const question = await askPrompt({
       kicker: "Decision",
       title: "发起决策任务",
@@ -858,12 +841,16 @@
       confirmText: "发起任务"
     });
     if (!question) return;
-    await api(ENDPOINTS.assistantDecision, {
-      method: POST_METHOD,
-      body: JSON.stringify({ projectId: state.projectId, question })
-    });
-    switchView(VIEW_TASKS);
-    await refreshWorkspace();
+    try {
+      await api(ENDPOINTS.assistantDecision, {
+        method: POST_METHOD,
+        body: JSON.stringify({ projectId: state.projectId, question })
+      });
+      switchView(VIEW_TASKS);
+      await refreshWorkspace();
+    } catch (error) {
+      showBanner(error.message || MESSAGES.error, true);
+    }
   };
 
   el("createExperimentBtn").onclick = async () => {
@@ -927,14 +914,18 @@
   el("assistantDecisionBtn").onclick = async () => {
     const question = el(DOM_ID.assistantInput).value.trim();
     if (!question || !state.projectId) return;
-    await api(ENDPOINTS.assistantDecision, {
-      method: POST_METHOD,
-      body: JSON.stringify({ projectId: state.projectId, question })
-    });
-    el(DOM_ID.assistantInput).value = "";
-    el(DOM_ID.assistantDrawer).hidden = true;
-    switchView(VIEW_TASKS);
-    await refreshWorkspace();
+    try {
+      await api(ENDPOINTS.assistantDecision, {
+        method: POST_METHOD,
+        body: JSON.stringify({ projectId: state.projectId, question })
+      });
+      el(DOM_ID.assistantInput).value = "";
+      el(DOM_ID.assistantDrawer).hidden = true;
+      switchView(VIEW_TASKS);
+      await refreshWorkspace();
+    } catch (error) {
+      showBanner(error.message || MESSAGES.error, true);
+    }
   };
 
   el("retryFailedTask").onclick = async () => {
@@ -947,44 +938,6 @@
     await refreshWorkspace();
   };
 
-  clearLegacySession();
+  clearStoredSessions();
   refreshStatus();
-  restoreSession();
-
-  async function restoreSession() {
-    const saved = readSession();
-    if (!saved?.auth || !saved.username) return;
-    state.username = saved.username;
-    state.auth = saved.auth;
-    state.roleLabel = saved.roleLabel || MESSAGES.researcher;
-    state.projectId = saved.projectId ? Number(saved.projectId) : null;
-    state.view = saved.view || VIEW_OVERVIEW;
-    document.body.classList.remove(AUTH_CLASSES.guest);
-    document.body.classList.add(AUTH_CLASSES.ready);
-    el(DOM_ID.loginStage).hidden = true;
-    el(DOM_ID.app).hidden = false;
-    el(DOM_ID.activeAccount).textContent = state.username;
-    el(DOM_ID.activeRole).textContent = state.roleLabel;
-    el(DOM_ID.openAssistant).hidden = false;
-    el(DOM_ID.refreshWorkspace).hidden = false;
-    try {
-      const projects = await api(ENDPOINTS.projects);
-      state.projects = projects;
-      renderProjects();
-      const matched = state.projectId && projects.some((project) => Number(project.id) === state.projectId);
-      if (matched) {
-        el(DOM_ID.projectPicker).hidden = true;
-        el(DOM_ID.workspaceRoot).hidden = false;
-        el(DOM_ID.backToProjects).hidden = false;
-        switchView(state.view);
-        await refreshWorkspace();
-      } else {
-        state.projectId = null;
-        showProjectPicker();
-      }
-    } catch (_) {
-      state.auth = null;
-      logout();
-    }
-  }
 })();
